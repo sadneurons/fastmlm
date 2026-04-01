@@ -1,0 +1,8 @@
+## -*- mode: makefile; -*-
+## fastmlm: Makevars.in — populated by configure
+
+PKG_CXXFLAGS = @OPENMP_CXXFLAGS@ @OPENBLAS_CPPFLAGS@ @OPENMP_CPPFLAGS@ \
+               @CUDA_CPPFLAGS@ -I../inst/include
+PKG_LIBS = @OPENMP_LIBS@ @OPENBLAS_LIBS@ $(LAPACK_LIBS) @CUDA_LIBS@
+
+CXX_STD = CXX17

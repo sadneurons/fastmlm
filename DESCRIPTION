@@ -1,0 +1,32 @@
+Package: fastmlm
+Title: Fast Multilevel Model Estimation
+Version: 0.0.1
+Authors@R:
+    person("First", "Last", email = "first.last@example.com",
+           role = c("aut", "cre"))
+Description: Fast estimation of multilevel (mixed-effects) linear models using
+    optimised C++ computational backends with direct BLAS linkage, automatic
+    differentiation for exact gradients, and optional GPU acceleration. Provides
+    a drop-in interface compatible with lme4 formula syntax while achieving
+    significant speedups through sparse Cholesky factorisation with pattern
+    reuse, L-BFGS-B optimisation, and Krylov subspace methods for crossed
+    random effects.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Depends:
+    R (>= 4.1.0)
+Imports:
+    Matrix,
+    methods,
+    lme4,
+    Rcpp
+Suggests:
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown,
+    bench
+Config/testthat/edition: 3
+LinkingTo: Rcpp, RcppEigen
+VignetteBuilder: knitr
