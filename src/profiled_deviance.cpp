@@ -39,72 +39,95 @@ double ProfiledDeviance::operator()(const VectorXd& theta) {
 // Pattern initialisation and fast A update
 // ============================================================================
 
-void ProfiledDeviance::init_pattern(const SpMatd& A) {
-    // Store a copy of A with its sparsity pattern
-    A_pattern_ = A;
-    pattern_initialized_ = true;
-}
+void ProfiledDeviance::init_pattern(const SpMatd& /* unused */) {}
 
 void ProfiledDeviance::update_A_fast(const VectorXd& theta) {
-    // Update Lambdat values from theta
     data_.update_Lambdat(theta);
     const SpMatd& Lamt = data_.Lambdat;
+    const SpMatd& ZtZ = data_.ZtZ;
+    const int q = data_.q;
 
     if (!pattern_initialized_) {
-        // First call: compute A the slow way and cache the pattern
-        SpMatd LZZLt = Lamt * data_.ZtZ * Lamt.transpose();
+        // First call: compute A via sparse multiply to get the sparsity pattern
+        SpMatd LZZLt = Lamt * ZtZ * Lamt.transpose();
         A_pattern_ = LZZLt;
-        // Add identity to diagonal
-        for (int j = 0; j < data_.q; ++j) {
+        for (int j = 0; j < q; ++j) {
             A_pattern_.coeffRef(j, j) += 1.0;
         }
+        A_pattern_.makeCompressed();
+
+        // Check if all RE terms are random-intercept-only (Lambdat is diagonal)
+        is_all_intercept_ = (Lamt.nonZeros() == q);
+
+        // Build the precomputed mapping for fast updates
+        const int* Ap = A_pattern_.outerIndexPtr();
+        const int* Ai = A_pattern_.innerIndexPtr();
+        int nnz = A_pattern_.nonZeros();
+        a_map_.resize(nnz);
+
+        for (int col = 0; col < q; ++col) {
+            for (int idx = Ap[col]; idx < Ap[col + 1]; ++idx) {
+                int row = Ai[idx];
+                AMapping& m = a_map_[idx];
+                m.is_diag = (row == col);
+
+                if (is_all_intercept_) {
+                    // For diagonal Lambdat: A(i,j) = Lamt(i,i)*ZtZ(i,j)*Lamt(j,j)
+                    // Find ZtZ(row, col) index by scanning ZtZ's column 'col'
+                    m.lamt_row = row;  // Lambdat diagonal position
+                    m.lamt_col = col;
+                    m.ztz_idx = -1;
+                    for (SpMatd::InnerIterator it(ZtZ, col); it; ++it) {
+                        if (it.row() == row) {
+                            // Store the raw index into ZtZ.valuePtr()
+                            m.ztz_idx = static_cast<int>(&it.value() - ZtZ.valuePtr());
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
         pattern_initialized_ = true;
         return;
     }
 
-    // Fast path: recompute A values using the precomputed pattern.
-    // A = Lamt * ZtZ * Lamt^T + I
-    //
-    // Since Lambdat is block-diagonal and its pattern is fixed,
-    // we can compute the product efficiently:
-    //   A(i,j) = sum_k sum_l Lamt(i,k) * ZtZ(k,l) * Lamt(j,l) + (i==j)
-    //
-    // For the product Lamt * ZtZ * Lamt^T, we compute it as:
-    //   tmp = Lamt * ZtZ   (sparse * sparse, but Lamt is very sparse — diagonal or block-diag)
-    //   A = tmp * Lamt^T + I
-    //
-    // Key insight: Lamt is block-diagonal with tiny blocks (1x1 or 2x2 etc.),
-    // so Lamt * ZtZ has the SAME sparsity pattern as ZtZ (just scaled rows).
-    // This means the product Lamt * ZtZ is just a row-scaling of ZtZ.
+    // === Fast path: update A values with NO sparse matrix multiply ===
 
-    // Compute Lamt * ZtZ as a row-scaled version of ZtZ
-    // For each nonzero ZtZ(k, l), the product Lamt * ZtZ has entry:
-    //   (Lamt * ZtZ)(i, l) = sum_k Lamt(i, k) * ZtZ(k, l)
-    // Since Lamt is block-diagonal, only Lamt(i, k) where k is in the same block as i is nonzero.
-
-    // For efficiency: form A = Lamt * ZtZ * Lamt^T + I directly
-    // using sparse operations but reusing the pattern
-    SpMatd tmp = Lamt * data_.ZtZ;
-    SpMatd LZZLt = tmp * Lamt.transpose();
-
-    // Copy values into pre-allocated pattern (preserving structure)
-    // Add identity to diagonal
     double* Ax = A_pattern_.valuePtr();
-    const double* Px = LZZLt.valuePtr();
     int nnz = A_pattern_.nonZeros();
 
-    // If the sparsity pattern matches exactly, just copy + add I
-    if (LZZLt.nonZeros() == nnz) {
-        std::memcpy(Ax, Px, nnz * sizeof(double));
-        // Add 1 to diagonal
-        for (int j = 0; j < data_.q; ++j) {
-            A_pattern_.coeffRef(j, j) += 1.0;
+    if (is_all_intercept_) {
+        // Random-intercept fast path: A(i,j) = Lamt(i,i)*ZtZ(i,j)*Lamt(j,j) + delta(i,j)
+        // Lamt diagonal values are directly in Lamt.valuePtr() at positions [0..q-1]
+        // since diagonal Lambdat has exactly one entry per column.
+        const double* Lx = Lamt.valuePtr();
+        const double* Zx = ZtZ.valuePtr();
+
+        for (int idx = 0; idx < nnz; ++idx) {
+            const AMapping& m = a_map_[idx];
+            double val = (m.is_diag) ? 1.0 : 0.0;
+            if (m.ztz_idx >= 0) {
+                val += Lx[m.lamt_row] * Zx[m.ztz_idx] * Lx[m.lamt_col];
+            }
+            Ax[idx] = val;
         }
     } else {
-        // Pattern changed (shouldn't happen, but fallback)
-        A_pattern_ = LZZLt;
-        for (int j = 0; j < data_.q; ++j) {
-            A_pattern_.coeffRef(j, j) += 1.0;
+        // General case: fall back to sparse triple product
+        // (still much faster than before since we reuse A_pattern_ storage)
+        SpMatd LZZLt = Lamt * ZtZ * Lamt.transpose();
+
+        if (LZZLt.nonZeros() == nnz) {
+            const double* Px = LZZLt.valuePtr();
+            std::memcpy(Ax, Px, nnz * sizeof(double));
+            for (int j = 0; j < q; ++j) {
+                A_pattern_.coeffRef(j, j) += 1.0;
+            }
+        } else {
+            A_pattern_ = LZZLt;
+            for (int j = 0; j < q; ++j) {
+                A_pattern_.coeffRef(j, j) += 1.0;
+            }
         }
     }
 }

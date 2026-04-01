@@ -622,7 +622,7 @@ OPENMP_LIBS
 OPENMP_CXXFLAGS
 OPENBLAS_CPPFLAGS
 OPENBLAS_LIBS
-NVCC
+NVCC_PATH
 OBJEXT
 EXEEXT
 ac_ct_CC
@@ -3245,66 +3245,41 @@ rm -f core conftest.err conftest.$ac_objext conftest.beam \
     conftest$ac_exeext conftest.$ac_ext
 CFLAGS="$save_CFLAGS"
 
-## ---- CUDA detection (Phase 5 placeholder) ----
+## ---- CUDA detection ----
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for CUDA/nvcc" >&5
 printf %s "checking for CUDA/nvcc... " >&6; }
 CUDA_CPPFLAGS=""
 CUDA_LIBS=""
+CUDA_HOME=""
 GPU_OBJECT="gpu_backend_stub"
+NVCC_PATH=""
 
-# Extract the first word of "nvcc", so it can be a program name with args.
-set dummy nvcc; ac_word=$2
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
-printf %s "checking for $ac_word... " >&6; }
-if test ${ac_cv_prog_NVCC+y}
-then :
-  printf %s "(cached) " >&6
-else $as_nop
-  if test -n "$NVCC"; then
-  ac_cv_prog_NVCC="$NVCC" # Let the user override the test.
-else
-as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
-for as_dir in $PATH
-do
-  IFS=$as_save_IFS
-  case $as_dir in #(((
-    '') as_dir=./ ;;
-    */) ;;
-    *) as_dir=$as_dir/ ;;
-  esac
-    for ac_exec_ext in '' $ac_executable_extensions; do
-  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
-    ac_cv_prog_NVCC="yes"
-    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
-    break 2
-  fi
+# Search common nvcc locations
+for nvcc_candidate in nvcc /usr/bin/nvcc /usr/local/cuda/bin/nvcc /usr/lib/nvidia-cuda-toolkit/bin/nvcc; do
+    if test -x "$(command -v $nvcc_candidate 2>/dev/null)" 2>/dev/null || test -x "$nvcc_candidate" 2>/dev/null; then
+        NVCC_PATH="$nvcc_candidate"
+        break
+    fi
 done
-  done
-IFS=$as_save_IFS
 
-  test -z "$ac_cv_prog_NVCC" && ac_cv_prog_NVCC="no"
-fi
-fi
-NVCC=$ac_cv_prog_NVCC
-if test -n "$NVCC"; then
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $NVCC" >&5
-printf "%s\n" "$NVCC" >&6; }
-else
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
-printf "%s\n" "no" >&6; }
-fi
-
-
-if test "x$NVCC" = "xyes"; then
-    CUDA_CPPFLAGS="-DFASTMLM_HAS_CUDA"
-    CUDA_LIBS="-lcublas -lcusolver -lcusparse"
-    GPU_OBJECT="gpu_backend"
-    { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-printf "%s\n" "yes" >&6; }
+if test -n "$NVCC_PATH"; then
+    # Check for cuBLAS header
+    if test -f /usr/include/cublas_v2.h || test -f /usr/local/cuda/include/cublas_v2.h; then
+        CUDA_CPPFLAGS="-DFASTMLM_HAS_CUDA"
+        CUDA_LIBS="-lcublas -lcusolver -lcusparse -lcudart"
+        GPU_OBJECT="gpu_backend"
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes ($NVCC_PATH)" >&5
+printf "%s\n" "yes ($NVCC_PATH)" >&6; }
+    else
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: nvcc found but cuBLAS headers missing" >&5
+printf "%s\n" "nvcc found but cuBLAS headers missing" >&6; }
+    fi
 else
     { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
 fi
+
+
 
 ## ---- Output ----
 

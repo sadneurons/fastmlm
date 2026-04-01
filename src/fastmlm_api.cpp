@@ -4,6 +4,7 @@
 #include "vcov_hessian.h"
 #include "blas_detect.h"
 #include "parallel_ops.h"
+#include "gpu_backend.h"
 
 using namespace fastmlm;
 
@@ -156,7 +157,10 @@ Rcpp::List C_fastmlm_blas_info() {
 #endif
         ,
         Rcpp::Named("omp_threads") = blas::get_omp_threads(),
-        Rcpp::Named("optimizer") = "L-BFGS-B (C++)"
+        Rcpp::Named("optimizer") = "L-BFGS-B (C++)",
+        Rcpp::Named("has_gpu") = gpu::is_available(),
+        Rcpp::Named("gpu_device") = gpu::device_name(),
+        Rcpp::Named("gpu_memory_mb") = static_cast<int>(gpu::device_memory_bytes() / (1024 * 1024))
     );
 }
 

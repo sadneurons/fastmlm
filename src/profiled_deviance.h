@@ -66,19 +66,19 @@ private:
     SpMatd A_pattern_;          // pre-allocated sparse matrix (pattern fixed)
     bool pattern_initialized_;
 
-    // For each nonzero in A, store how it derives from ZtZ and Lambdat.
-    // This avoids the O(nnz * log) sparse multiply on every iteration.
-    struct AEntry {
-        int row, col;           // position in A
-        int a_idx;              // index into A.valuePtr()
-        // Contribution: sum of Lamt(row, k) * ZtZ(k, l) * Lamt(col, l)
-        // For random intercept: just theta^2 * ZtZ(row, col) + (row==col)
-        // We store the ZtZ value and the Lambdat indices for general case
-        double ztz_val;         // ZtZ(row, col) value
-        bool is_diagonal;       // true if row == col (add identity)
+    // Precomputed mapping: for each nonzero in A, how to compute its
+    // value from Lambdat diagonal entries and ZtZ values.
+    // Handles random intercept (k=1) with a fast scalar multiply,
+    // and random slopes (k>1) via small dense block products.
+    struct AMapping {
+        int ztz_idx;    // index into ZtZ.valuePtr() (-1 if no ZtZ contribution)
+        int lamt_row;   // Lambdat diagonal index for the row (for k=1 case)
+        int lamt_col;   // Lambdat diagonal index for the col (for k=1 case)
+        bool is_diag;   // true if on diagonal (add 1.0)
     };
-    // Simplified: for each nonzero position in A, what ZtZ value to scale
-    // This works because Lambdat is block-diagonal with identical blocks per term.
+    std::vector<AMapping> a_map_;
+    bool is_all_intercept_;  // true if all RE terms are random-intercept-only (k=1)
+    VectorXi diag_indices_;  // position of diagonal entries in A.valuePtr()
 
     // Precomputed sparse-dense products
     MatrixXd ZtX_;              // Zt * X, computed once (q x p)

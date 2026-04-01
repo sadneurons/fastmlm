@@ -6,3 +6,9 @@ PKG_CXXFLAGS = @OPENMP_CXXFLAGS@ @OPENBLAS_CPPFLAGS@ @OPENMP_CPPFLAGS@ \
 PKG_LIBS = @OPENMP_LIBS@ @OPENBLAS_LIBS@ $(LAPACK_LIBS) @CUDA_LIBS@
 
 CXX_STD = CXX17
+
+## When CUDA is available, compile gpu_backend.cpp instead of gpu_backend_stub.cpp
+OBJECTS = RcppExports.o fastmlm_api.o model_data.o profiled_deviance.o \
+          sparse_cholesky.o cholmod_wrapper.o cholmod_stubs.o \
+          theta_optimizer.o lbfgsb.o autodiff.o vcov_hessian.o \
+          crossed_re.o parallel_ops.o blas_detect.o @GPU_OBJECT@.o

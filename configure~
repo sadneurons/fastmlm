@@ -3201,16 +3201,11 @@ fi
 ## ---- OpenMP detection ----
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for OpenMP" >&5
 printf %s "checking for OpenMP... " >&6; }
-OPENMP_CXXFLAGS=""
-OPENMP_LIBS=""
-OPENMP_CPPFLAGS=""
-
-# Use R's built-in OpenMP detection variables
-# These are set by R CMD config
 OPENMP_CXXFLAGS='$(SHLIB_OPENMP_CXXFLAGS)'
 OPENMP_LIBS='$(SHLIB_OPENMP_CXXFLAGS)'
+OPENMP_CPPFLAGS=""
 
-# Test if the compiler actually supports OpenMP
+# Check if the compiler supports -fopenmp
 ac_ext=c
 ac_cpp='$CPP $CPPFLAGS'
 ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
@@ -3222,19 +3217,15 @@ CFLAGS="$CFLAGS -fopenmp"
 cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
-        #include <omp.h>
-
 int
 main (void)
 {
-
-        int n = omp_get_num_threads();
 
   ;
   return 0;
 }
 _ACEOF
-if ac_fn_c_try_compile "$LINENO"
+if ac_fn_c_try_link "$LINENO"
 then :
 
         OPENMP_CPPFLAGS="-DFASTMLM_HAS_OPENMP"
@@ -3250,7 +3241,8 @@ printf "%s\n" "no" >&6; }
 
 
 fi
-rm -f core conftest.err conftest.$ac_objext conftest.beam conftest.$ac_ext
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
 CFLAGS="$save_CFLAGS"
 
 ## ---- CUDA detection (Phase 5 placeholder) ----

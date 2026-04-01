@@ -59,21 +59,37 @@ AC_LINK_IFELSE(
 )
 CFLAGS="$save_CFLAGS"
 
-## ---- CUDA detection (Phase 5 placeholder) ----
+## ---- CUDA detection ----
 AC_MSG_CHECKING([for CUDA/nvcc])
 CUDA_CPPFLAGS=""
 CUDA_LIBS=""
+CUDA_HOME=""
 GPU_OBJECT="gpu_backend_stub"
+NVCC_PATH=""
 
-AC_CHECK_PROG([NVCC], [nvcc], [yes], [no])
-if test "x$NVCC" = "xyes"; then
-    CUDA_CPPFLAGS="-DFASTMLM_HAS_CUDA"
-    CUDA_LIBS="-lcublas -lcusolver -lcusparse"
-    GPU_OBJECT="gpu_backend"
-    AC_MSG_RESULT([yes])
+# Search common nvcc locations
+for nvcc_candidate in nvcc /usr/bin/nvcc /usr/local/cuda/bin/nvcc /usr/lib/nvidia-cuda-toolkit/bin/nvcc; do
+    if test -x "$(command -v $nvcc_candidate 2>/dev/null)" 2>/dev/null || test -x "$nvcc_candidate" 2>/dev/null; then
+        NVCC_PATH="$nvcc_candidate"
+        break
+    fi
+done
+
+if test -n "$NVCC_PATH"; then
+    # Check for cuBLAS header
+    if test -f /usr/include/cublas_v2.h || test -f /usr/local/cuda/include/cublas_v2.h; then
+        CUDA_CPPFLAGS="-DFASTMLM_HAS_CUDA"
+        CUDA_LIBS="-lcublas -lcusolver -lcusparse -lcudart"
+        GPU_OBJECT="gpu_backend"
+        AC_MSG_RESULT([yes ($NVCC_PATH)])
+    else
+        AC_MSG_RESULT([nvcc found but cuBLAS headers missing])
+    fi
 else
     AC_MSG_RESULT([no])
 fi
+
+AC_SUBST(NVCC_PATH)
 
 ## ---- Output ----
 AC_SUBST(OPENBLAS_LIBS)
