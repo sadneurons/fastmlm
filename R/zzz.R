@@ -1,7 +1,8 @@
 .onLoad <- function(libname, pkgname) {
-  # Nothing critical here — thread counts are inherited from the
-  # environment (OMP_NUM_THREADS, OPENBLAS_NUM_THREADS).
-  # Users can override via fastmlm_set_threads().
+  # Register emmeans methods if emmeans is available
+  if (requireNamespace("emmeans", quietly = TRUE)) {
+    emmeans::.emm_register("fmlmMod", pkgname = "fastmlm")
+  }
 }
 
 #' Report BLAS and system information

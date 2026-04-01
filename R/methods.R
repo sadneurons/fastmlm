@@ -180,8 +180,19 @@ setMethod("show", "fmlmMod", function(object) {
   fe <- fixef.fmlmMod(object)
   se <- sqrt(diag(vcov(object)))
   tval <- fe / se
-  coef_tab <- cbind(Estimate = fe, `Std. Error` = se, `t value` = tval)
-  print(round(coef_tab, 4))
+
+  # Try Satterthwaite df for p-values
+  sat_df <- tryCatch(satterthwaite_df(object), error = function(e) NULL)
+  if (!is.null(sat_df)) {
+    pval <- 2 * stats::pt(abs(tval), df = sat_df, lower.tail = FALSE)
+    coef_tab <- cbind(Estimate = fe, `Std. Error` = se, df = sat_df,
+                      `t value` = tval, `Pr(>|t|)` = pval)
+  } else {
+    coef_tab <- cbind(Estimate = fe, `Std. Error` = se, `t value` = tval)
+  }
+  stats::printCoefmat(coef_tab, P.values = !is.null(sat_df),
+                      has.Pvalue = !is.null(sat_df), digits = 4,
+                      signif.stars = TRUE)
 
   cat("\nOptimiser:", object@optinfo$optimizer,
       "| Convergence:", object@optinfo$convergence, "\n")
@@ -194,9 +205,6 @@ setMethod("summary", "fmlmMod", function(object, ...) {
   show(object)
 
   cat("\nDeviance:", round(object@deviance, 2), "\n")
-  cat("Sigma:   ", round(object@sigma, 4), "\n")
-  cat("Theta:   ", paste(round(object@theta, 4), collapse = ", "), "\n")
-
   ll <- logLik(object)
   cat("logLik:  ", round(as.numeric(ll), 2), "\n")
   cat("AIC:     ", round(AIC(object), 2), "\n")

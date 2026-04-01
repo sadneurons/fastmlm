@@ -13,6 +13,26 @@ S3method(ranef, fmlmMod)
 S3method(VarCorr, fmlmMod)
 S3method(print, VarCorr.fmlmMod)
 
+# S3 methods for standard generics
+S3method(formula, fmlmMod)
+S3method(terms, fmlmMod)
+S3method(model.matrix, fmlmMod)
+S3method(model.frame, fmlmMod)
+S3method(nobs, fmlmMod)
+S3method(sigma, fmlmMod)
+S3method(df.residual, fmlmMod)
+S3method(predict, fmlmMod)
+S3method(confint, fmlmMod)
+
+# emmeans support
+S3method(recover_data, fmlmMod)
+S3method(emm_basis, fmlmMod)
+
+# broom.mixed support
+S3method(tidy, fmlmMod)
+S3method(glance, fmlmMod)
+S3method(augment, fmlmMod)
+
 # S4 methods for base generics
 exportMethods(summary)
 exportMethods(show)
@@ -25,7 +45,9 @@ exportMethods(logLik)
 importFrom(Rcpp, sourceCpp)
 importFrom(methods, new, setClass, setGeneric, setMethod, is, show, validObject)
 importFrom(Matrix, sparseMatrix, t)
-importFrom(stats, optim, na.omit, AIC, BIC, coef, fitted, logLik, residuals, vcov)
+importFrom(stats, optim, na.omit, AIC, BIC, coef, fitted, logLik, residuals, vcov,
+           sigma, nobs, df.residual, predict, confint, terms, model.matrix,
+           model.frame, delete.response, reformulate, qnorm)
 importFrom(lme4, lFormula, lmerControl, fixef, ranef, VarCorr)
 
 useDynLib(fastmlm, .registration = TRUE)
