@@ -96,6 +96,7 @@ setMethod("vcov", "fmlmMod", function(object, ...) {
   object@vcov_beta
 })
 
+#' @rdname fmlmMod-class
 #' @export
 setMethod("coef", "fmlmMod", function(object, ...) {
   fe <- fixef.fmlmMod(object)
@@ -119,6 +120,7 @@ setMethod("coef", "fmlmMod", function(object, ...) {
   result
 })
 
+#' @rdname fmlmMod-class
 #' @export
 setMethod("fitted", "fmlmMod", function(object, ...) {
   Xb <- as.numeric(object@X %*% object@beta)
@@ -135,6 +137,7 @@ setMethod("fitted", "fmlmMod", function(object, ...) {
   Xb + Zb
 })
 
+#' @rdname fmlmMod-class
 #' @export
 setMethod("residuals", "fmlmMod", function(object, type = "response", ...) {
   y <- object@frame[, 1]
@@ -142,6 +145,7 @@ setMethod("residuals", "fmlmMod", function(object, type = "response", ...) {
   y - fv
 })
 
+#' @rdname fmlmMod-class
 #' @export
 setMethod("logLik", "fmlmMod", function(object, ...) {
   ll <- -0.5 * object@deviance
