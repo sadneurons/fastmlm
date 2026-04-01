@@ -8,29 +8,18 @@
 namespace fastmlm {
 
 // Evaluates the profiled REML or ML deviance as a function of theta.
-// This is the hot loop — every optimizer iteration calls operator().
 //
-// Two computational paths:
-//   (A) Direct sparse Cholesky — for nested RE or small crossed RE (default)
-//   (B) PCG + stochastic log-det — for large crossed RE (q > pcg_threshold)
-//
-// Algorithm (Bates et al. 2015, JSS):
-//   1. Update Lambdat from theta
-//   2. Form A = Lambdat * ZtZ * Lambdat^T + I
-//   3. Decompose A (Cholesky or PCG)
-//   4. Solve for cu, RZX
-//   5. Form RXtRX = XtX - RZX^T RZX (path A) or XtX - LamtZtX^T A^{-1} LamtZtX (path B)
-//   6. Dense Cholesky of RXtRX → beta
-//   7. Compute u, pwrss, deviance
+// Key optimization: the sparsity pattern of A = Lamt * ZtZ * Lamt^T + I
+// is fixed across iterations (only values change). We precompute the
+// pattern once and maintain a mapping from (theta, Lind) to the
+// numerical values of A, avoiding redundant sparse matrix multiplications.
 class ProfiledDeviance {
 public:
     ProfiledDeviance(MLMData& data, bool REML = true,
                      int pcg_threshold = 5000, int n_probes = 30);
 
-    // Evaluate profiled deviance at theta
     double operator()(const VectorXd& theta);
 
-    // Accessors (valid after a call to operator())
     const VectorXd& beta() const { return beta_; }
     const VectorXd& u() const { return u_; }
     double sigma2() const { return sigma2_; }
@@ -39,7 +28,6 @@ public:
     double ldRX2() const { return ldRX2_; }
     double pwrss() const { return pwrss_; }
 
-    // Variance-covariance of beta (unscaled)
     MatrixXd vcov_beta_unscaled() const;
 
     bool is_REML() const { return REML_; }
@@ -51,33 +39,60 @@ private:
     bool use_pcg_;
     int n_probes_;
 
-    // === Path A: Direct Cholesky ===
+    // Sparse Cholesky
     SparseCholeskyManager L_chol_;
     bool chol_initialized_;
 
-    // === Path B: PCG for crossed RE ===
+    // PCG for crossed RE
     CrossedRESolver crossed_solver_;
 
-    // Dense Cholesky for RXtRX (p x p), used by both paths
+    // Dense Cholesky for RXtRX
     Eigen::LLT<MatrixXd> RX_chol_;
 
     // Cached results
     VectorXd beta_;
     VectorXd u_;
-    double sigma2_;
-    double deviance_;
-    double ldL2_;
-    double ldRX2_;
-    double pwrss_;
+    double sigma2_, deviance_, ldL2_, ldRX2_, pwrss_;
 
-    // Working storage
-    SpMatd LamtZtZLamt_;
-    MatrixXd RZX_;
-    VectorXd cu_;
+    // Working storage (reused across iterations)
+    VectorXd cu_;               // L^{-1} Lambdat Zty
+    MatrixXd RZX_;              // L^{-1} Lambdat ZtX
+
+    // === Precomputed structure for fast A update ===
+    // A = Lamt * ZtZ * Lamt^T + I
+    // We store A's sparsity pattern and a mapping that lets us
+    // recompute A's values directly from theta without forming
+    // the sparse triple product.
+    SpMatd A_pattern_;          // pre-allocated sparse matrix (pattern fixed)
+    bool pattern_initialized_;
+
+    // For each nonzero in A, store how it derives from ZtZ and Lambdat.
+    // This avoids the O(nnz * log) sparse multiply on every iteration.
+    struct AEntry {
+        int row, col;           // position in A
+        int a_idx;              // index into A.valuePtr()
+        // Contribution: sum of Lamt(row, k) * ZtZ(k, l) * Lamt(col, l)
+        // For random intercept: just theta^2 * ZtZ(row, col) + (row==col)
+        // We store the ZtZ value and the Lambdat indices for general case
+        double ztz_val;         // ZtZ(row, col) value
+        bool is_diagonal;       // true if row == col (add identity)
+    };
+    // Simplified: for each nonzero position in A, what ZtZ value to scale
+    // This works because Lambdat is block-diagonal with identical blocks per term.
+
+    // Precomputed sparse-dense products
+    MatrixXd ZtX_;              // Zt * X, computed once (q x p)
+    bool ztx_initialized_;
 
     // Path dispatch
     double eval_cholesky(const VectorXd& theta);
     double eval_pcg(const VectorXd& theta);
+
+    // Fast update of A = Lamt * ZtZ * Lamt^T + I using precomputed pattern
+    void update_A_fast(const VectorXd& theta);
+
+    // Initialise pattern on first call
+    void init_pattern(const SpMatd& A);
 };
 
 } // namespace fastmlm

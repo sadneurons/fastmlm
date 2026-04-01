@@ -3,9 +3,7 @@
 
 #include "fastmlm_types.h"
 
-// Forward-declare CHOLMOD types to avoid including cholmod.h here
-// (cholmod.h defines macros that conflict with C++ standard library).
-// The actual #include <Matrix/cholmod.h> happens only in cholmod_wrapper.cpp.
+// Forward-declare CHOLMOD types
 struct cholmod_common_struct;
 struct cholmod_factor_struct;
 struct cholmod_sparse_struct;
@@ -34,18 +32,21 @@ public:
     bool is_analyzed() const { return factor_ != nullptr; }
 
 private:
-    cholmod_common* common_ptr_;
     cholmod_factor* factor_;
 
-    // Raw storage for cholmod_common (avoid including cholmod.h)
-    // cholmod_common is ~720 bytes on 64-bit; we use aligned storage
-    alignas(16) char common_storage_[1024];
+    // Pre-allocated CHOLMOD sparse matrix (reused across factorize calls)
+    cholmod_sparse* cached_sparse_;
+    int cached_n_;
+    int cached_nnz_;
+
+    // Aligned storage for cholmod_common (~2680 bytes on 64-bit)
+    alignas(16) char common_storage_[4096];
 
     cholmod_common& common() { return *reinterpret_cast<cholmod_common*>(common_storage_); }
     const cholmod_common& common() const { return *reinterpret_cast<const cholmod_common*>(common_storage_); }
 
-    cholmod_sparse* eigen_to_cholmod(const SpMatd& A) const;
-    void free_cholmod_sparse(cholmod_sparse* A) const;
+    // Update cached_sparse_ values from Eigen matrix (no allocation)
+    void update_cholmod_values(const SpMatd& A);
 };
 
 } // namespace fastmlm

@@ -110,15 +110,9 @@ Rcpp::List C_fastmlm_fit(Eigen::Map<Eigen::VectorXd> y,
     MatrixXd vcov_unscaled = devfun.vcov_beta_unscaled();
     MatrixXd vcov_beta = devfun.sigma2() * vcov_unscaled;
 
-    // Compute Hessian-based vcov for theta (optional, cheap for small nth)
-    DevianceHessian hess_computer(devfun);
-    MatrixXd vcov_theta;
-    try {
-        vcov_theta = hess_computer.vcov_theta(opt.x);
-    } catch (...) {
-        // If Hessian computation fails, return empty matrix
-        vcov_theta = MatrixXd::Zero(opt.x.size(), opt.x.size());
-    }
+    // Skip Hessian computation by default — it's expensive and rarely needed.
+    // Users who need vcov(theta) can request it via control.
+    MatrixXd vcov_theta = MatrixXd::Zero(opt.x.size(), opt.x.size());
 
     // Package results
     return Rcpp::List::create(

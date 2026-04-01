@@ -1,27 +1,16 @@
-// CHOLMOD wrapper using Matrix package's CHOLMOD.
-//
-// The actual CHOLMOD stub functions (M_cholmod_*) are compiled in
-// cholmod_stubs.c (pure C). Here we just declare them as extern "C"
-// and call them.
-
 #include <Rcpp.h>
 
-// Include CHOLMOD types (but NOT stubs.c — that's in cholmod_stubs.c)
-// We need the cholmod_common, cholmod_sparse, etc. typedefs.
-// Use R_NO_REMAP to prevent macro conflicts with Rcpp.
 #define R_NO_REMAP
 #include <Matrix/cholmod.h>
 #undef R_NO_REMAP
-
-// Undo any conflicting macros from cholmod.h
 #undef length
 #undef FREE
 
 #include "cholmod_wrapper.h"
 #include <cmath>
+#include <cstring>
 #include <stdexcept>
 
-// Declare the Matrix stub functions (defined in cholmod_stubs.c)
 extern "C" {
     cholmod_factor* M_cholmod_analyze(cholmod_sparse*, cholmod_common*);
     int M_cholmod_factorize(cholmod_sparse*, cholmod_factor*, cholmod_common*);
@@ -37,55 +26,46 @@ extern "C" {
 
 namespace fastmlm {
 
-CholmodWrapper::CholmodWrapper() : factor_(nullptr) {
+CholmodWrapper::CholmodWrapper()
+    : factor_(nullptr), cached_sparse_(nullptr), cached_n_(0), cached_nnz_(0)
+{
     M_cholmod_start(&common());
     common().supernodal = CHOLMOD_SUPERNODAL;
 }
 
 CholmodWrapper::~CholmodWrapper() {
-    if (factor_) {
-        M_cholmod_free_factor(&factor_, &common());
-    }
+    if (factor_) M_cholmod_free_factor(&factor_, &common());
+    if (cached_sparse_) M_cholmod_free_sparse(&cached_sparse_, &common());
     M_cholmod_finish(&common());
 }
 
-cholmod_sparse* CholmodWrapper::eigen_to_cholmod(const SpMatd& A) const {
+void CholmodWrapper::update_cholmod_values(const SpMatd& A) {
     int n = A.rows();
     int nnz = A.nonZeros();
 
-    cholmod_sparse* C = M_cholmod_allocate_sparse(
-        n, n, nnz,
-        1,  // sorted
-        1,  // packed
-        0,  // stype=0 (set below)
-        CHOLMOD_REAL,
-        const_cast<cholmod_common*>(&common())
-    );
+    // Allocate or reallocate if dimensions changed
+    if (!cached_sparse_ || cached_n_ != n || cached_nnz_ != nnz) {
+        if (cached_sparse_) M_cholmod_free_sparse(&cached_sparse_, &common());
 
-    if (!C) return nullptr;
+        cached_sparse_ = M_cholmod_allocate_sparse(
+            n, n, nnz, 1, 1, 0, CHOLMOD_REAL, &common());
+        if (!cached_sparse_) throw std::runtime_error("CHOLMOD: alloc failed");
 
-    int* Cp = static_cast<int*>(C->p);
-    int* Ci = static_cast<int*>(C->i);
-    double* Cx = static_cast<double*>(C->x);
+        cached_n_ = n;
+        cached_nnz_ = nnz;
 
-    const int* Ap = A.outerIndexPtr();
-    const int* Ai = A.innerIndexPtr();
-    const double* Ax = A.valuePtr();
-
-    for (int j = 0; j <= n; ++j) Cp[j] = Ap[j];
-    for (int k = 0; k < nnz; ++k) {
-        Ci[k] = Ai[k];
-        Cx[k] = Ax[k];
+        // Copy structure (column pointers and row indices — stable across iterations)
+        int* Cp = static_cast<int*>(cached_sparse_->p);
+        int* Ci = static_cast<int*>(cached_sparse_->i);
+        const int* Ap = A.outerIndexPtr();
+        const int* Ai = A.innerIndexPtr();
+        std::memcpy(Cp, Ap, (n + 1) * sizeof(int));
+        std::memcpy(Ci, Ai, nnz * sizeof(int));
     }
 
-    // Mark as symmetric upper for analyze/factorize
-    C->stype = 1;
-
-    return C;
-}
-
-void CholmodWrapper::free_cholmod_sparse(cholmod_sparse* A) const {
-    M_cholmod_free_sparse(&A, const_cast<cholmod_common*>(&common()));
+    // Only copy numerical values (this is the fast path for repeat factorizations)
+    std::memcpy(cached_sparse_->x, A.valuePtr(), nnz * sizeof(double));
+    cached_sparse_->stype = 1;  // symmetric, upper triangle
 }
 
 void CholmodWrapper::analyze(const SpMatd& pattern) {
@@ -94,26 +74,20 @@ void CholmodWrapper::analyze(const SpMatd& pattern) {
         factor_ = nullptr;
     }
 
-    cholmod_sparse* C = eigen_to_cholmod(pattern);
-    if (!C) throw std::runtime_error("CHOLMOD: failed to convert matrix");
-
-    factor_ = M_cholmod_analyze(C, &common());
-    free_cholmod_sparse(C);
-
-    if (!factor_) throw std::runtime_error("CHOLMOD: symbolic analysis failed");
+    update_cholmod_values(pattern);
+    factor_ = M_cholmod_analyze(cached_sparse_, &common());
+    if (!factor_) throw std::runtime_error("CHOLMOD: analysis failed");
 }
 
 double CholmodWrapper::factorize(const SpMatd& A) {
     if (!factor_) throw std::runtime_error("CHOLMOD: must call analyze() first");
 
-    cholmod_sparse* C = eigen_to_cholmod(A);
-    if (!C) throw std::runtime_error("CHOLMOD: failed to convert matrix");
+    // Update only the numerical values (structure unchanged)
+    update_cholmod_values(A);
 
-    int ok = M_cholmod_factorize(C, factor_, &common());
-    free_cholmod_sparse(C);
-
+    int ok = M_cholmod_factorize(cached_sparse_, factor_, &common());
     if (!ok || common().status != CHOLMOD_OK) {
-        throw std::runtime_error("CHOLMOD: numeric factorisation failed");
+        throw std::runtime_error("CHOLMOD: factorisation failed");
     }
 
     return M_cholmod_factor_ldetA(factor_);
@@ -121,14 +95,12 @@ double CholmodWrapper::factorize(const SpMatd& A) {
 
 VectorXd CholmodWrapper::solve(const VectorXd& b) const {
     if (!factor_) throw std::runtime_error("CHOLMOD: no factorisation");
-
     int n = b.size();
+
     cholmod_dense b_chm;
     b_chm.nrow = n; b_chm.ncol = 1; b_chm.nzmax = n; b_chm.d = n;
-    b_chm.x = const_cast<double*>(b.data());
-    b_chm.z = nullptr;
-    b_chm.xtype = CHOLMOD_REAL;
-    b_chm.dtype = CHOLMOD_DOUBLE;
+    b_chm.x = const_cast<double*>(b.data()); b_chm.z = nullptr;
+    b_chm.xtype = CHOLMOD_REAL; b_chm.dtype = CHOLMOD_DOUBLE;
 
     cholmod_dense* x_chm = M_cholmod_solve(
         CHOLMOD_A, factor_, &b_chm, const_cast<cholmod_common*>(&common()));
@@ -141,31 +113,25 @@ VectorXd CholmodWrapper::solve(const VectorXd& b) const {
 }
 
 MatrixXd CholmodWrapper::solve(const MatrixXd& B) const {
-    int n = B.rows(), nrhs = B.cols();
-    MatrixXd X(n, nrhs);
-    for (int j = 0; j < nrhs; ++j) {
-        X.col(j) = solve(VectorXd(B.col(j)));
-    }
+    int nrhs = B.cols();
+    MatrixXd X(B.rows(), nrhs);
+    for (int j = 0; j < nrhs; ++j) X.col(j) = solve(VectorXd(B.col(j)));
     return X;
 }
 
 VectorXd CholmodWrapper::solve_L(const VectorXd& b) const {
     if (!factor_) throw std::runtime_error("CHOLMOD: no factorisation");
-
     int n = b.size();
+
     cholmod_dense b_chm;
     b_chm.nrow = n; b_chm.ncol = 1; b_chm.nzmax = n; b_chm.d = n;
-    b_chm.x = const_cast<double*>(b.data());
-    b_chm.z = nullptr;
-    b_chm.xtype = CHOLMOD_REAL;
-    b_chm.dtype = CHOLMOD_DOUBLE;
+    b_chm.x = const_cast<double*>(b.data()); b_chm.z = nullptr;
+    b_chm.xtype = CHOLMOD_REAL; b_chm.dtype = CHOLMOD_DOUBLE;
 
-    // P b
     cholmod_dense* Pb = M_cholmod_solve(
         CHOLMOD_P, factor_, &b_chm, const_cast<cholmod_common*>(&common()));
     if (!Pb) throw std::runtime_error("CHOLMOD: P solve failed");
 
-    // L^{-1} P b
     cholmod_dense* x_chm = M_cholmod_solve(
         CHOLMOD_L, factor_, Pb, const_cast<cholmod_common*>(&common()));
     M_cholmod_free_dense(&Pb, const_cast<cholmod_common*>(&common()));
@@ -179,21 +145,17 @@ VectorXd CholmodWrapper::solve_L(const VectorXd& b) const {
 
 VectorXd CholmodWrapper::solve_Lt(const VectorXd& b) const {
     if (!factor_) throw std::runtime_error("CHOLMOD: no factorisation");
-
     int n = b.size();
+
     cholmod_dense b_chm;
     b_chm.nrow = n; b_chm.ncol = 1; b_chm.nzmax = n; b_chm.d = n;
-    b_chm.x = const_cast<double*>(b.data());
-    b_chm.z = nullptr;
-    b_chm.xtype = CHOLMOD_REAL;
-    b_chm.dtype = CHOLMOD_DOUBLE;
+    b_chm.x = const_cast<double*>(b.data()); b_chm.z = nullptr;
+    b_chm.xtype = CHOLMOD_REAL; b_chm.dtype = CHOLMOD_DOUBLE;
 
-    // L^{-T} b
     cholmod_dense* y_chm = M_cholmod_solve(
         CHOLMOD_Lt, factor_, &b_chm, const_cast<cholmod_common*>(&common()));
     if (!y_chm) throw std::runtime_error("CHOLMOD: Lt solve failed");
 
-    // P^T result
     cholmod_dense* x_chm = M_cholmod_solve(
         CHOLMOD_Pt, factor_, y_chm, const_cast<cholmod_common*>(&common()));
     M_cholmod_free_dense(&y_chm, const_cast<cholmod_common*>(&common()));

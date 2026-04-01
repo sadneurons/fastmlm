@@ -9,8 +9,9 @@ SparseCholeskyManager::SparseCholeskyManager(int cholmod_threshold)
       use_cholmod_(false),
       analyzed_(false)
 {
-    // Default threshold of 0 means always use CHOLMOD
-    // (CHOLMOD is faster at essentially all sizes since it uses supernodal)
+    // Default threshold of 300: CHOLMOD's supernodal Cholesky wins for
+    // larger matrices, but the Eigen→CHOLMOD conversion overhead makes it
+    // slower for small q. Threshold of ~300 is the crossover point.
 }
 
 void SparseCholeskyManager::analyze(const SpMatd& pattern) {

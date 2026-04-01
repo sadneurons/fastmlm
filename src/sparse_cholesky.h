@@ -21,7 +21,7 @@ namespace fastmlm {
 // Both backends expose the same interface: analyze (once) + factorize (many).
 class SparseCholeskyManager {
 public:
-    SparseCholeskyManager(int cholmod_threshold = 0);
+    SparseCholeskyManager(int cholmod_threshold = 300);
 
     // Symbolic analysis of sparsity pattern — call once
     void analyze(const SpMatd& pattern);
