@@ -4,11 +4,28 @@
 
 namespace fastmlm {
 
+SparseCholeskyManager::SparseCholeskyManager(int cholmod_threshold)
+    : cholmod_threshold_(cholmod_threshold),
+      use_cholmod_(false),
+      analyzed_(false)
+{
+    // Default threshold of 0 means always use CHOLMOD
+    // (CHOLMOD is faster at essentially all sizes since it uses supernodal)
+}
+
 void SparseCholeskyManager::analyze(const SpMatd& pattern) {
-    solver_.analyzePattern(pattern);
-    if (solver_.info() != Eigen::Success) {
-        throw std::runtime_error("Sparse Cholesky: symbolic analysis failed");
+    int q = pattern.rows();
+    use_cholmod_ = (q > cholmod_threshold_);
+
+    if (use_cholmod_) {
+        cholmod_solver_.analyze(pattern);
+    } else {
+        eigen_solver_.analyzePattern(pattern);
+        if (eigen_solver_.info() != Eigen::Success) {
+            throw std::runtime_error("Sparse Cholesky: symbolic analysis failed");
+        }
     }
+
     analyzed_ = true;
 }
 
@@ -17,53 +34,57 @@ double SparseCholeskyManager::factorize(const SpMatd& A) {
         throw std::runtime_error("Sparse Cholesky: must call analyze() before factorize()");
     }
 
-    solver_.factorize(A);
-    if (solver_.info() != Eigen::Success) {
-        throw std::runtime_error("Sparse Cholesky: numeric factorisation failed "
-                                 "(matrix may not be positive definite)");
+    if (use_cholmod_) {
+        return cholmod_solver_.factorize(A);
     }
 
-    // Compute 2 * log|L| = sum of log of diagonal entries of L
-    // L is lower triangular, so |A| = |L|^2 and log|A| = 2 * sum(log(L_ii))
-    const SpMatd& L = solver_.matrixL();
+    // Eigen path
+    eigen_solver_.factorize(A);
+    if (eigen_solver_.info() != Eigen::Success) {
+        throw std::runtime_error("Sparse Cholesky: numeric factorisation failed");
+    }
+
+    const SpMatd& L = eigen_solver_.matrixL();
     double ldL2 = 0.0;
     for (int j = 0; j < L.cols(); ++j) {
-        // Diagonal of L in column j
-        // For SimplicialLLT, the diagonal entry is at the start of each column
-        double Ljj = L.coeff(j, j);
-        ldL2 += std::log(Ljj);
+        ldL2 += std::log(L.coeff(j, j));
     }
     ldL2 *= 2.0;
-
     return ldL2;
 }
 
 VectorXd SparseCholeskyManager::solve_L(const VectorXd& b) const {
-    // Solve L x = P b where P is the fill-reducing permutation
-    const SpMatd& L = solver_.matrixL();
-    VectorXd Pb = solver_.permutationP() * b;
-    // Forward substitution
+    if (use_cholmod_) {
+        return cholmod_solver_.solve_L(b);
+    }
+
+    const SpMatd& L = eigen_solver_.matrixL();
+    VectorXd Pb = eigen_solver_.permutationP() * b;
     return L.triangularView<Eigen::Lower>().solve(Pb);
 }
 
 VectorXd SparseCholeskyManager::solve_Lt(const VectorXd& b) const {
-    // Solve L^T x = b, then apply P^T
-    const SpMatd& L = solver_.matrixL();
+    if (use_cholmod_) {
+        return cholmod_solver_.solve_Lt(b);
+    }
+
+    const SpMatd& L = eigen_solver_.matrixL();
     VectorXd x = L.transpose().triangularView<Eigen::Upper>().solve(b);
-    return solver_.permutationPinv() * x;
+    return eigen_solver_.permutationPinv() * x;
 }
 
 VectorXd SparseCholeskyManager::solve(const VectorXd& b) const {
-    return solver_.solve(b);
+    if (use_cholmod_) {
+        return cholmod_solver_.solve(b);
+    }
+    return eigen_solver_.solve(b);
 }
 
 MatrixXd SparseCholeskyManager::solve(const MatrixXd& B) const {
-    return solver_.solve(B);
-}
-
-const Eigen::PermutationMatrix<Eigen::Dynamic, Eigen::Dynamic, int>&
-SparseCholeskyManager::permutation() const {
-    return solver_.permutationP();
+    if (use_cholmod_) {
+        return cholmod_solver_.solve(B);
+    }
+    return eigen_solver_.solve(B);
 }
 
 } // namespace fastmlm

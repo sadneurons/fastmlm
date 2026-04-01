@@ -2,14 +2,26 @@
 #define FASTMLM_SPARSE_CHOLESKY_H
 
 #include "fastmlm_types.h"
+#include "cholmod_wrapper.h"
 
 namespace fastmlm {
 
-// Wrapper around Eigen's SimplicialLLT that separates symbolic analysis
-// (expensive, done once) from numeric factorisation (cheap, done every iteration).
+// Sparse Cholesky manager with automatic backend selection.
+//
+// For small matrices (q <= threshold): uses Eigen's SimplicialLLT
+//   - Header-only, zero dependencies, works with AD
+//   - Adequate performance for typical MLM sizes
+//
+// For large matrices (q > threshold): uses CHOLMOD supernodal via
+//   R's Matrix package
+//   - Supernodal Cholesky with dense BLAS kernels on interior blocks
+//   - Same engine lme4 uses internally
+//   - Significantly faster for q > ~500
+//
+// Both backends expose the same interface: analyze (once) + factorize (many).
 class SparseCholeskyManager {
 public:
-    SparseCholeskyManager() : analyzed_(false) {}
+    SparseCholeskyManager(int cholmod_threshold = 0);
 
     // Symbolic analysis of sparsity pattern — call once
     void analyze(const SpMatd& pattern);
@@ -18,10 +30,10 @@ public:
     // Returns 2 * log|L| (the log-determinant contribution)
     double factorize(const SpMatd& A);
 
-    // Solve L x = b (lower triangular)
+    // Solve L x = P b (lower triangular)
     VectorXd solve_L(const VectorXd& b) const;
 
-    // Solve L^T x = b (upper triangular)
+    // Solve L^T x = b, then apply P^T
     VectorXd solve_Lt(const VectorXd& b) const;
 
     // Solve A x = b (full: L L^T x = b)
@@ -30,19 +42,19 @@ public:
     // Solve A X = B (multiple RHS)
     MatrixXd solve(const MatrixXd& B) const;
 
-    // Permutation vector (for applying to RHS before/after solve)
-    const Eigen::PermutationMatrix<Eigen::Dynamic, Eigen::Dynamic, int>&
-    permutation() const;
-
     bool is_analyzed() const { return analyzed_; }
-
-    // Access the internal solver for advanced use
-    const Eigen::SimplicialLLT<SpMatd, Eigen::Lower, Eigen::AMDOrdering<int>>&
-    solver() const { return solver_; }
+    bool using_cholmod() const { return use_cholmod_; }
 
 private:
-    Eigen::SimplicialLLT<SpMatd, Eigen::Lower, Eigen::AMDOrdering<int>> solver_;
+    int cholmod_threshold_;
+    bool use_cholmod_;
     bool analyzed_;
+
+    // Backend A: Eigen SimplicialLLT
+    Eigen::SimplicialLLT<SpMatd, Eigen::Lower, Eigen::AMDOrdering<int>> eigen_solver_;
+
+    // Backend B: CHOLMOD supernodal
+    CholmodWrapper cholmod_solver_;
 };
 
 } // namespace fastmlm

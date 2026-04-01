@@ -28,5 +28,5 @@ Suggests:
     rmarkdown,
     bench
 Config/testthat/edition: 3
-LinkingTo: Rcpp, RcppEigen
+LinkingTo: Rcpp, RcppEigen, Matrix
 VignetteBuilder: knitr

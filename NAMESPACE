@@ -5,6 +5,7 @@ export(fmlm_control)
 export(fastmlm_blas_info)
 export(fastmlm_set_threads)
 export(fastmlm_benchmark_blas)
+export(fastmlm_clear_cache)
 
 # S3 methods for lme4 generics
 S3method(fixef, fmlmMod)

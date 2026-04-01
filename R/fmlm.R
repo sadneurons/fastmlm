@@ -37,34 +37,62 @@ fmlm <- function(formula, data, REML = TRUE,
   mc <- match.call()
   verbose <- as.integer(verbose)
 
-  # --- Parse formula via lme4::lFormula ---
-  lf_args <- list(
-    formula  = formula,
-    data     = data,
-    REML     = REML,
-    na.action = na.action,
-    control   = lme4::lmerControl(
-      check.nobs.vs.nlev  = "ignore",
-      check.nobs.vs.nRE   = "ignore",
-      check.nlev.gtr.1    = "ignore",
-      check.nobs.vs.rankZ = "ignore"
+  # --- Parse formula: try cache → fast parser → lme4 fallback ---
+  cached <- cache_get(formula, data)
+  if (!is.null(cached)) {
+    lf <- cached
+  } else {
+    lf <- tryCatch(
+      fast_lFormula(formula, data, REML = REML,
+                    na.action = na.action, contrasts = contrasts),
+      error = function(e) {
+        if (verbose > 0L) {
+          message("fastmlm: fast parser failed (", conditionMessage(e),
+                  "), falling back to lme4::lFormula")
+        }
+        lf_args <- list(
+          formula  = formula,
+          data     = data,
+          REML     = REML,
+          na.action = na.action,
+          control   = lme4::lmerControl(
+            check.nobs.vs.nlev  = "ignore",
+            check.nobs.vs.nRE   = "ignore",
+            check.nlev.gtr.1    = "ignore",
+            check.nobs.vs.rankZ = "ignore"
+          )
+        )
+        if (!is.null(subset))    lf_args$subset    <- subset
+        if (!is.null(weights))   lf_args$weights   <- weights
+        if (!is.null(contrasts)) lf_args$contrasts <- contrasts
+        lf_raw <- do.call(lme4::lFormula, lf_args)
+        # Normalise to same structure as fast_lFormula output
+        list(
+          fr      = lf_raw$fr,
+          X       = lf_raw$X,
+          Zt      = lf_raw$reTrms$Zt,
+          Lambdat = lf_raw$reTrms$Lambdat,
+          Lind    = as.integer(lf_raw$reTrms$Lind),
+          theta   = as.numeric(lf_raw$reTrms$theta),
+          lower   = as.numeric(lf_raw$reTrms$lower),
+          flist   = lf_raw$reTrms$flist,
+          cnms    = lf_raw$reTrms$cnms,
+          Gp      = as.integer(lf_raw$reTrms$Gp)
+        )
+      }
     )
-  )
-  if (!is.null(subset))    lf_args$subset    <- subset
-  if (!is.null(weights))   lf_args$weights   <- weights
-  if (!is.null(contrasts)) lf_args$contrasts <- contrasts
-
-  lf <- do.call(lme4::lFormula, lf_args)
+    cache_put(formula, data, lf)
+  }
 
   # Extract components
   y       <- as.numeric(lf$fr[, 1])
   X       <- as.matrix(lf$X)
-  Zt      <- lf$reTrms$Zt
-  Lambdat <- lf$reTrms$Lambdat
-  Lind    <- as.integer(lf$reTrms$Lind)
-  theta0  <- as.numeric(lf$reTrms$theta)
-  lower   <- as.numeric(lf$reTrms$lower)
-  Gp      <- as.integer(lf$reTrms$Gp)
+  Zt      <- lf$Zt
+  Lambdat <- lf$Lambdat
+  Lind    <- as.integer(lf$Lind)
+  theta0  <- as.numeric(lf$theta)
+  lower   <- as.numeric(lf$lower)
+  Gp      <- as.integer(lf$Gp)
 
   # PCG threshold from control
   pcg_threshold <- if (!is.null(control$pcg_threshold)) {
@@ -107,9 +135,9 @@ fmlm <- function(formula, data, REML = TRUE,
       call      = mc,
       formula   = formula,
       frame     = lf$fr,
-      flist     = lf$reTrms$flist,
-      cnms      = lf$reTrms$cnms,
-      Gp        = as.integer(lf$reTrms$Gp),
+      flist     = lf$flist,
+      cnms      = lf$cnms,
+      Gp        = as.integer(lf$Gp),
       lower     = lower,
       theta     = as.numeric(result$theta),
       beta      = as.numeric(result$beta),
@@ -172,9 +200,9 @@ fmlm <- function(formula, data, REML = TRUE,
       call      = mc,
       formula   = formula,
       frame     = lf$fr,
-      flist     = lf$reTrms$flist,
-      cnms      = lf$reTrms$cnms,
-      Gp        = as.integer(lf$reTrms$Gp),
+      flist     = lf$flist,
+      cnms      = lf$cnms,
+      Gp        = as.integer(lf$Gp),
       lower     = lower,
       theta     = as.numeric(opt$par),
       beta      = as.numeric(result$beta),
