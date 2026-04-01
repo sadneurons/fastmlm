@@ -157,6 +157,19 @@ setMethod("logLik", "fmlmMod", function(object, ...) {
   ll
 })
 
+# S3 version needed for AIC/BIC dispatch
+#' @export
+logLik.fmlmMod <- function(object, ...) {
+  ll <- -0.5 * object@deviance
+  n <- nrow(object@frame)
+  p <- length(object@beta)
+  nth <- length(object@theta)
+  attr(ll, "df") <- p + nth + 1L
+  attr(ll, "nobs") <- if (object@REML) n - p else n
+  class(ll) <- "logLik"
+  ll
+}
+
 #' @export
 setMethod("show", "fmlmMod", function(object) {
   cat("Fast Multilevel Linear Model (fastmlm)\n")

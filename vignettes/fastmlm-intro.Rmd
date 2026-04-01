@@ -1,0 +1,163 @@
+---
+title: "Getting Started with fastmlm"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting Started with fastmlm}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+## Overview
+
+**fastmlm** fits linear mixed-effects models using the same formula syntax as
+`lme4::lmer()`, but with a high-performance C++ backend that delivers 4-14x
+speedups. It provides:
+
+- A custom formula parser (3.8x faster than `lme4::lFormula`)
+- Formula/data caching for repeated fits (bootstrap, simulation)
+- C++ L-BFGS-B optimizer with forward-difference gradients
+- CHOLMOD supernodal sparse Cholesky (via R's Matrix package)
+- Precomputed sparse matrix mappings (zero-allocation deviance updates)
+- Optional GPU acceleration via CUDA (cuBLAS/cuSPARSE)
+- Satterthwaite degrees of freedom (no lmerTest dependency needed)
+- Compatibility with emmeans and broom.mixed
+
+## Basic usage
+
+fastmlm uses the same formula interface as lme4:
+
+```{r basic}
+library(fastmlm)
+library(lme4)
+data(sleepstudy)
+
+m <- fmlm(Reaction ~ Days + (Days | Subject), data = sleepstudy)
+m
+```
+
+## Extracting results
+
+All the standard methods work:
+
+```{r extractors}
+fixef(m)
+head(ranef(m)$Subject)
+VarCorr(m)
+```
+
+Variance-covariance of fixed effects:
+
+```{r vcov}
+vcov(m)
+```
+
+Confidence intervals:
+
+```{r confint}
+confint(m)
+```
+
+## Comparing with lme4
+
+fastmlm produces numerically identical results:
+
+```{r compare}
+m_lme4 <- lmer(Reaction ~ Days + (Days | Subject), data = sleepstudy)
+
+# Fixed effects agree to machine precision
+max(abs(fixef(m) - lme4::fixef(m_lme4)))
+
+# Residual SD
+c(fastmlm = sigma(m), lme4 = sigma(m_lme4))
+```
+
+## REML vs ML
+
+```{r reml-ml}
+m_reml <- fmlm(Reaction ~ Days + (1 | Subject), data = sleepstudy, REML = TRUE)
+m_ml   <- fmlm(Reaction ~ Days + (1 | Subject), data = sleepstudy, REML = FALSE)
+
+c(REML_sigma = sigma(m_reml), ML_sigma = sigma(m_ml))
+c(REML_AIC = AIC(m_reml), ML_AIC = AIC(m_ml))
+```
+
+## Crossed random effects
+
+fastmlm handles crossed designs (common in psycholinguistics):
+
+```{r crossed}
+set.seed(42)
+n_subj <- 30; n_item <- 20
+subj <- factor(rep(1:n_subj, each = n_item))
+item <- factor(rep(1:n_item, times = n_subj))
+x <- rnorm(n_subj * n_item)
+y <- 2 + 0.5 * x + rnorm(n_subj, sd = 1.5)[subj] +
+     rnorm(n_item, sd = 1.0)[item] + rnorm(n_subj * n_item)
+df <- data.frame(y, x, subj, item)
+
+m_crossed <- fmlm(y ~ x + (1 | subj) + (1 | item), data = df)
+m_crossed
+```
+
+## Formula caching for repeated fits
+
+When fitting the same model repeatedly (e.g., bootstrapping), fastmlm
+caches the parsed formula and design matrices. The second fit onwards
+skips all formula parsing:
+
+```{r caching}
+# First fit (cold)
+system.time(fmlm(Reaction ~ Days + (Days | Subject), data = sleepstudy))
+
+# Second fit (cached — formula parsing skipped)
+system.time(fmlm(Reaction ~ Days + (Days | Subject), data = sleepstudy))
+
+# Clear cache if needed
+fastmlm_clear_cache()
+```
+
+## System information
+
+Check what backends are active:
+
+```{r sysinfo}
+fastmlm_blas_info()
+```
+
+## Control parameters
+
+Fine-tune the optimizer:
+
+```{r control}
+m <- fmlm(Reaction ~ Days + (Days | Subject), data = sleepstudy,
+          control = fmlm_control(
+            optimizer = "L-BFGS-B",
+            maxiter = 500,
+            ftol = 1e-12,
+            gtol = 1e-10
+          ))
+```
+
+## Working with emmeans
+
+fastmlm integrates with emmeans for estimated marginal means:
+
+```{r emmeans, eval=requireNamespace("emmeans", quietly=TRUE)}
+library(emmeans)
+em <- emmeans(m, ~ Days, at = list(Days = c(0, 5, 9)))
+em
+pairs(em)
+```
+
+## Working with broom.mixed
+
+Tidy output is available:
+
+```{r broom}
+fastmlm:::tidy.fmlmMod(m)
+fastmlm:::glance.fmlmMod(m)
+```

@@ -3,6 +3,18 @@
   if (requireNamespace("emmeans", quietly = TRUE)) {
     emmeans::.emm_register("fmlmMod", pkgname = "fastmlm")
   }
+
+  # Register broom/generics methods if available
+  register_if <- function(generic, class, method) {
+    for (pkg in c("generics", "broom", "broom.mixed")) {
+      if (isNamespaceLoaded(pkg)) {
+        registerS3method(generic, class, method, envir = asNamespace(pkg))
+      }
+    }
+  }
+  register_if("tidy", "fmlmMod", tidy.fmlmMod)
+  register_if("glance", "fmlmMod", glance.fmlmMod)
+  register_if("augment", "fmlmMod", augment.fmlmMod)
 }
 
 #' Report BLAS and system information

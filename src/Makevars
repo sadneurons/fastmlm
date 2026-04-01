@@ -1,0 +1,14 @@
+## -*- mode: makefile; -*-
+## fastmlm: Makevars.in — populated by configure
+
+PKG_CXXFLAGS = $(SHLIB_OPENMP_CXXFLAGS) -DFASTMLM_HAS_OPENBLAS -DFASTMLM_HAS_OPENMP \
+               -DFASTMLM_HAS_CUDA -I../inst/include
+PKG_LIBS = $(SHLIB_OPENMP_CXXFLAGS) -L/usr/lib/x86_64-linux-gnu/openblas-pthread/ -lopenblas  $(LAPACK_LIBS) -lcublas -lcusolver -lcusparse -lcudart
+
+CXX_STD = CXX17
+
+## When CUDA is available, compile gpu_backend.cpp instead of gpu_backend_stub.cpp
+OBJECTS = RcppExports.o fastmlm_api.o model_data.o profiled_deviance.o \
+          sparse_cholesky.o cholmod_wrapper.o cholmod_stubs.o \
+          theta_optimizer.o lbfgsb.o autodiff.o vcov_hessian.o \
+          crossed_re.o parallel_ops.o blas_detect.o gpu_backend.o
