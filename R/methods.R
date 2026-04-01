@@ -91,6 +91,7 @@ VarCorr.fmlmMod <- function(x, sigma = 1, ...) {
 
 # --- S4 methods for standard generics ---
 
+#' @rdname fmlmMod-class
 #' @export
 setMethod("vcov", "fmlmMod", function(object, ...) {
   object@vcov_beta
@@ -175,6 +176,7 @@ logLik.fmlmMod <- function(object, ...) {
   ll
 }
 
+#' @rdname fmlmMod-class
 #' @export
 setMethod("show", "fmlmMod", function(object) {
   cat("Fast Multilevel Linear Model (fastmlm)\n")
@@ -218,6 +220,7 @@ setMethod("show", "fmlmMod", function(object) {
   invisible(object)
 })
 
+#' @rdname fmlmMod-class
 #' @export
 setMethod("summary", "fmlmMod", function(object, ...) {
   show(object)

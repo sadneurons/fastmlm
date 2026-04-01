@@ -1,5 +1,9 @@
 #' S4 class for fastmlm model fit
 #'
+#' @param object An \code{fmlmMod} object.
+#' @param type Character; type of residuals (currently only \code{"response"}).
+#' @param ... Additional arguments (ignored).
+#'
 #' @slot call The matched call.
 #' @slot formula The model formula.
 #' @slot frame The model frame.

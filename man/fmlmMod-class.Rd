@@ -3,12 +3,17 @@
 \docType{class}
 \name{fmlmMod-class}
 \alias{fmlmMod-class}
+\alias{vcov,fmlmMod-method}
 \alias{coef,fmlmMod-method}
 \alias{fitted,fmlmMod-method}
 \alias{residuals,fmlmMod-method}
 \alias{logLik,fmlmMod-method}
+\alias{show,fmlmMod-method}
+\alias{summary,fmlmMod-method}
 \title{S4 class for fastmlm model fit}
 \usage{
+\S4method{vcov}{fmlmMod}(object, ...)
+
 \S4method{coef}{fmlmMod}(object, ...)
 
 \S4method{fitted}{fmlmMod}(object, ...)
@@ -16,6 +21,17 @@
 \S4method{residuals}{fmlmMod}(object, type = "response", ...)
 
 \S4method{logLik}{fmlmMod}(object, ...)
+
+\S4method{show}{fmlmMod}(object)
+
+\S4method{summary}{fmlmMod}(object, ...)
+}
+\arguments{
+\item{object}{An \code{fmlmMod} object.}
+
+\item{...}{Additional arguments (ignored).}
+
+\item{type}{Character; type of residuals (currently only \code{"response"}).}
 }
 \description{
 S4 class for fastmlm model fit

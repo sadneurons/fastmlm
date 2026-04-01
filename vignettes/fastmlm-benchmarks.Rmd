@@ -56,7 +56,7 @@ bench_one <- function(label, expr_fast, expr_lme4, n_reps = 20) {
 
 ## Random intercept models
 
-```{r ri-bench}
+```{r ri-bench, eval=FALSE}
 data(sleepstudy)
 results <- list()
 
@@ -100,7 +100,7 @@ knitr::kable(res_df, row.names = FALSE,
 
 ## Crossed random effects
 
-```{r crossed-bench}
+```{r crossed-bench, eval=FALSE}
 set.seed(42)
 n_subj <- 100; n_item <- 50; n <- n_subj * n_item
 s <- factor(rep(seq_len(n_subj), each = n_item))

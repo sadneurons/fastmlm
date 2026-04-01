@@ -2,7 +2,7 @@ Package: fastmlm
 Title: Fast Estimation of Multilevel Linear Models
 Version: 0.1.0
 Authors@R:
-    person("First", "Last", email = "first.last@example.com",
+    person("Ross A.", "Dunne", email = "sadneurons@pm.me",
            role = c("aut", "cre"))
 Description: Fits linear mixed-effects models 4-14x faster than 'lme4' using a
     high-performance C++ backend. Features include a custom formula parser,
