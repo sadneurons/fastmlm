@@ -23,6 +23,11 @@ fmlm_control(
 
 \item{ftol}{Numeric; function tolerance for convergence.}
 
+\item{gtol}{Numeric; projected gradient norm tolerance for convergence.}
+
+\item{pcg_threshold}{Integer; random-effects dimension above which the PCG
+solver is used for crossed random effects instead of direct Cholesky.}
+
 \item{verbose}{Integer; verbosity level (0 = silent, 1 = progress, 2 = debug).}
 
 \item{nthreads}{Integer; number of threads for OpenMP operations.

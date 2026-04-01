@@ -93,8 +93,15 @@ void set_omp_threads(int n) {
 }
 
 double benchmark_dgemm(int n) {
-    Eigen::MatrixXd A = Eigen::MatrixXd::Random(n, n);
-    Eigen::MatrixXd B = Eigen::MatrixXd::Random(n, n);
+    // Use Eigen's setOnes + scalar ops instead of Random() which calls rand()
+    // (CRAN policy: compiled code should not call rand/srand)
+    Eigen::MatrixXd A = Eigen::MatrixXd::Ones(n, n) * 0.5;
+    Eigen::MatrixXd B = Eigen::MatrixXd::Ones(n, n) * 0.3;
+    // Add some variation so the compiler doesn't optimise it away
+    for (int i = 0; i < n; ++i) {
+        A(i, i) = 1.0 + 0.01 * i;
+        B(i, i) = 1.0 - 0.01 * i;
+    }
 
     auto start = std::chrono::high_resolution_clock::now();
     Eigen::MatrixXd C = A * B;

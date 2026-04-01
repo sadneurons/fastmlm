@@ -2,7 +2,6 @@
 ^\.Rproj\.user$
 ^LICENSE\.md$
 ^\.github$
-^configure\.ac$
 ^autom4te\.cache$
 ^\.claude$
 ^README\.md$

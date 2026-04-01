@@ -158,6 +158,7 @@ setMethod("logLik", "fmlmMod", function(object, ...) {
 })
 
 # S3 version needed for AIC/BIC dispatch
+#' @method logLik fmlmMod
 #' @export
 logLik.fmlmMod <- function(object, ...) {
   ll <- -0.5 * object@deviance

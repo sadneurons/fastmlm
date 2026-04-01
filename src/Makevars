@@ -3,7 +3,7 @@
 
 PKG_CXXFLAGS = $(SHLIB_OPENMP_CXXFLAGS) -DFASTMLM_HAS_OPENBLAS -DFASTMLM_HAS_OPENMP \
                -DFASTMLM_HAS_CUDA -I../inst/include
-PKG_LIBS = $(SHLIB_OPENMP_CXXFLAGS) -L/usr/lib/x86_64-linux-gnu/openblas-pthread/ -lopenblas  $(LAPACK_LIBS) -lcublas -lcusolver -lcusparse -lcudart
+PKG_LIBS = $(SHLIB_OPENMP_CXXFLAGS) -L/usr/lib/x86_64-linux-gnu/openblas-pthread/ -lopenblas  $(LAPACK_LIBS) $(BLAS_LIBS) -lcublas -lcusolver -lcusparse -lcudart
 
 CXX_STD = CXX17
 

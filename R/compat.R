@@ -7,33 +7,41 @@
 
 # --- Standard extractors (formula, terms, model.matrix, nobs, sigma) ---
 
+#' @method formula fmlmMod
 #' @export
 formula.fmlmMod <- function(x, ...) x@formula
 
+#' @method terms fmlmMod
 #' @export
 terms.fmlmMod <- function(x, ...) {
   # Return terms for fixed effects only (remove bar terms)
-  fixed_f <- fastmlm:::remove_bars(formula(x))
+  fixed_f <- remove_bars(formula(x))
   stats::terms(fixed_f, data = x@frame)
 }
 
+#' @method model.matrix fmlmMod
 #' @export
 model.matrix.fmlmMod <- function(object, ...) object@X
 
+#' @method nobs fmlmMod
 #' @export
 nobs.fmlmMod <- function(object, ...) nrow(object@frame)
 
+#' @method sigma fmlmMod
 #' @export
 sigma.fmlmMod <- function(object, ...) object@sigma
 
+#' @method df.residual fmlmMod
 #' @export
 df.residual.fmlmMod <- function(object, ...) {
   nrow(object@frame) - length(object@beta)
 }
 
+#' @method model.frame fmlmMod
 #' @export
 model.frame.fmlmMod <- function(formula, ...) formula@frame
 
+#' @method predict fmlmMod
 #' @export
 predict.fmlmMod <- function(object, newdata = NULL, re.form = NULL, ...) {
   if (is.null(newdata)) {
@@ -47,6 +55,7 @@ predict.fmlmMod <- function(object, newdata = NULL, re.form = NULL, ...) {
   as.numeric(X_new %*% fixef(object))
 }
 
+#' @method confint fmlmMod
 #' @export
 confint.fmlmMod <- function(object, parm, level = 0.95, ...) {
   fe <- fixef(object)
@@ -182,6 +191,21 @@ satterthwaite_df <- function(object) {
 # emmeans support
 # ============================================================================
 
+#' emmeans support for fmlmMod
+#'
+#' Methods for \pkg{emmeans} integration. \code{recover_data} returns the
+#' model data and \code{emm_basis} returns the basis for computing
+#' estimated marginal means.
+#'
+#' @param object An \code{fmlmMod} object.
+#' @param data Optional data frame override.
+#' @param trms A terms object.
+#' @param xlev A list of factor levels.
+#' @param grid A data frame of predictor combinations.
+#' @param ... Additional arguments (ignored).
+#' @return For \code{recover_data}: a data frame. For \code{emm_basis}: a
+#'   named list with components X, bhat, V, nbasis, dffun, dfargs.
+#' @name emmeans-support
 #' @export
 recover_data.fmlmMod <- function(object, data = NULL, ...) {
   fcall <- object@call
@@ -190,6 +214,7 @@ recover_data.fmlmMod <- function(object, data = NULL, ...) {
   emmeans::recover_data(fcall, trms, "na.omit", data = data)
 }
 
+#' @rdname emmeans-support
 #' @export
 emm_basis.fmlmMod <- function(object, trms, xlev, grid, ...) {
   X <- stats::model.matrix(trms, data = grid, xlev = xlev)
@@ -228,6 +253,19 @@ emm_basis.fmlmMod <- function(object, trms, xlev, grid, ...) {
 # broom.mixed support
 # ============================================================================
 
+#' broom.mixed support for fmlmMod
+#'
+#' Methods for tidy model output compatible with \pkg{broom.mixed}.
+#'
+#' @param x An \code{fmlmMod} object.
+#' @param effects Character vector; which effects to return
+#'   (\code{"fixed"}, \code{"ran_pars"}, or both).
+#' @param conf.int Logical; include confidence intervals?
+#' @param conf.level Numeric; confidence level.
+#' @param data Optional data frame for augment.
+#' @param ... Additional arguments (ignored).
+#' @return A data frame.
+#' @name broom-support
 #' @export
 tidy.fmlmMod <- function(x, effects = c("fixed", "ran_pars"),
                           conf.int = FALSE, conf.level = 0.95, ...) {
@@ -281,6 +319,7 @@ tidy.fmlmMod <- function(x, effects = c("fixed", "ran_pars"),
   result
 }
 
+#' @rdname broom-support
 #' @export
 glance.fmlmMod <- function(x, ...) {
   ll <- logLik(x)
@@ -297,6 +336,7 @@ glance.fmlmMod <- function(x, ...) {
   )
 }
 
+#' @rdname broom-support
 #' @export
 augment.fmlmMod <- function(x, data = NULL, ...) {
   if (is.null(data)) data <- x@frame

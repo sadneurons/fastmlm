@@ -4,6 +4,9 @@
 #'   (default) or \code{"bobyqa"} (via \pkg{nloptr}).
 #' @param maxiter Integer; maximum number of optimiser iterations.
 #' @param ftol Numeric; function tolerance for convergence.
+#' @param gtol Numeric; projected gradient norm tolerance for convergence.
+#' @param pcg_threshold Integer; random-effects dimension above which the PCG
+#'   solver is used for crossed random effects instead of direct Cholesky.
 #' @param verbose Integer; verbosity level (0 = silent, 1 = progress, 2 = debug).
 #' @param nthreads Integer; number of threads for OpenMP operations.
 #'   0 (default) uses auto-detection.
