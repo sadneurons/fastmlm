@@ -1,11 +1,8 @@
 # ============================================================================
 # Downstream package compatibility for fmlmMod
-#
-# Provides interfaces for: emmeans, broom.mixed, effects, performance
-# Also provides Satterthwaite degrees of freedom (replacing lmerTest need)
 # ============================================================================
 
-# --- Standard extractors (formula, terms, model.matrix, nobs, sigma) ---
+# --- Standard extractors ---
 
 #' @method formula fmlmMod
 #' @export
@@ -14,7 +11,6 @@ formula.fmlmMod <- function(x, ...) x@formula
 #' @method terms fmlmMod
 #' @export
 terms.fmlmMod <- function(x, ...) {
-  # Return terms for fixed effects only (remove bar terms)
   fixed_f <- remove_bars(formula(x))
   stats::terms(fixed_f, data = x@frame)
 }
@@ -48,32 +44,35 @@ predict.fmlmMod <- function(object, newdata = NULL, re.form = NULL, ...) {
     return(fitted(object))
   }
 
-  # For prediction with basis functions (rcs, ns, poly), we need the
-  # same knots/parameters used during training. Append a sample of
-  # training data to ensure basis functions can compute their parameters,
-  # then extract only the newdata rows.
+  # Build model matrix for new data using the training X as template.
+  # This handles basis functions (rcs, ns, poly) by re-evaluating
+  # the formula terms. For rcs(), we substitute stored knots.
   trms <- stats::delete.response(terms(object))
-  n_new <- nrow(newdata)
+  term_labels <- attr(trms, "term.labels")
 
-  X_new <- tryCatch(
-    stats::model.matrix(trms, data = newdata),
-    error = function(e) {
-      # Basis function (rcs/ns/poly) needs training data for knot
-      # placement. Build a combined data frame with all training
-      # columns, overwriting predictor values with newdata for the
-      # prediction rows.
-      n_train <- nrow(object@frame)
-      template <- object@frame[rep(1L, n_new), , drop = FALSE]
-      rownames(template) <- NULL
-      for (col in names(newdata)) {
-        if (col %in% names(template)) template[[col]] <- newdata[[col]]
+  # Check for rcs() terms and substitute explicit knots
+  rcs_knots <- object@optinfo$rcs_knots
+  if (!is.null(rcs_knots) && length(rcs_knots) > 0) {
+    # Build a modified formula with explicit knots
+    new_labels <- term_labels
+    for (i in seq_along(new_labels)) {
+      lab <- new_labels[i]
+      # Match rcs(varname, nknots) pattern
+      m <- regmatches(lab, regexec("^rcs\\(([^,]+),\\s*([0-9]+)\\)$", lab))[[1]]
+      if (length(m) == 3) {
+        varname <- m[2]
+        if (varname %in% names(rcs_knots)) {
+          knots <- rcs_knots[[varname]]
+          knot_str <- paste(knots, collapse = ", ")
+          new_labels[i] <- sprintf("rcs(%s, c(%s))", varname, knot_str)
+        }
       }
-      combined <- rbind(object@frame, template)
-      X_comb <- stats::model.matrix(trms, data = combined)
-      X_comb[seq(n_train + 1L, nrow(X_comb)), , drop = FALSE]
     }
-  )
+    new_formula <- stats::reformulate(new_labels)
+    trms <- stats::terms(new_formula, data = newdata)
+  }
 
+  X_new <- stats::model.matrix(trms, data = newdata)
   as.numeric(X_new %*% fixef(object))
 }
 
@@ -96,15 +95,10 @@ confint.fmlmMod <- function(object, parm, level = 0.95, ...) {
 
 #' Compute Satterthwaite degrees of freedom for fixed effects
 #'
-#' Approximates the denominator degrees of freedom for t-tests of
-#' fixed effects using the Satterthwaite (1946) method.
-#'
 #' @param object An \code{fmlmMod} object.
 #' @param method Character; \code{"fast"} (default) uses numerical
-#'   central differences for the Jacobian of vcov(beta) w.r.t. theta.
-#'   \code{"exact"} uses a finer step size and more precise Hessian,
-#'   matching lmerTest's analytical results more closely at the cost
-#'   of additional deviance evaluations.
+#'   central differences. \code{"exact"} includes sigma in the variance
+#'   parameter vector for closer agreement with lmerTest.
 #' @return A numeric vector of degrees of freedom, one per fixed effect.
 #' @keywords internal
 satterthwaite_df <- function(object, method = c("fast", "exact")) {
@@ -116,14 +110,9 @@ satterthwaite_df <- function(object, method = c("fast", "exact")) {
   theta <- object@theta
   nth <- length(theta)
 
-  # Step size: finer for "exact" mode
   eps <- if (method == "exact") 1e-6 else 1e-4
 
-  # For "exact" mode, include sigma in the variance parameter vector
-  # (lmerTest parameterises as (theta, log(sigma)) and differentiates
-  # vcov w.r.t. all variance parameters jointly)
   if (method == "exact") {
-    # Augmented parameter vector: (theta, sigma)
     sigma_val <- object@sigma
     n_vpar <- nth + 1L
   } else {
@@ -141,13 +130,11 @@ satterthwaite_df <- function(object, method = c("fast", "exact")) {
 
   pp <- C_fastmlm_create(y, X, Zt, Lambdat, Lind, lower, object@REML)
 
-  # Helper: evaluate vcov(beta) at a given theta
   vcov_at <- function(th) {
     C_fastmlm_deviance(pp, th)
     as.matrix(C_fastmlm_result(pp)$vcov_beta)
   }
 
-  # Jacobian of vcov(beta) w.r.t. theta (central differences)
   for (k in seq_len(nth)) {
     h <- eps * max(1, abs(theta[k]))
     theta_p <- theta; theta_p[k] <- theta[k] + h
@@ -155,8 +142,6 @@ satterthwaite_df <- function(object, method = c("fast", "exact")) {
     Jac[, , k] <- (vcov_at(theta_p) - vcov_at(theta_m)) / (2 * h)
   }
 
-  # For "exact" mode: also differentiate w.r.t. sigma
-  # vcov(beta) = sigma^2 * unscaled_vcov, so d(vcov)/d(sigma) = 2*sigma * unscaled
   if (method == "exact") {
     C_fastmlm_deviance(pp, theta)
     res0 <- C_fastmlm_result(pp)
@@ -164,30 +149,10 @@ satterthwaite_df <- function(object, method = c("fast", "exact")) {
     Jac[, , n_vpar] <- 2 * res0$sigma * unscaled_V
   }
 
-  # Restore state
   C_fastmlm_deviance(pp, theta)
-
-  # vcov of variance parameters from Hessian of deviance
   f0 <- C_fastmlm_deviance(pp, theta)
 
-  # For "exact" mode: build Hessian over (theta, sigma) jointly
-  # For "fast" mode: Hessian over theta only
   vcov_vpar <- matrix(0, n_vpar, n_vpar)
-
-  # Deviance as function of augmented parameter vector
-  dev_at <- function(vpar) {
-    if (method == "exact") {
-      # vpar = (theta, sigma). But sigma isn't a free parameter in the
-      # profiled deviance — it's determined by theta. So we can't perturb
-      # sigma independently. Instead, compute vcov(sigma) from the
-      # relationship sigma^2 = pwrss / df.
-      #
-      # For the theta components, use the standard Hessian.
-      C_fastmlm_deviance(pp, vpar[seq_len(nth)])
-    } else {
-      C_fastmlm_deviance(pp, vpar)
-    }
-  }
 
   h_vec <- numeric(n_vpar)
   for (k in seq_len(nth)) {
@@ -197,7 +162,6 @@ satterthwaite_df <- function(object, method = c("fast", "exact")) {
     h_vec[n_vpar] <- eps * max(1, abs(sigma_val))
   }
 
-  # Hessian of deviance w.r.t. theta
   f_plus <- numeric(nth)
   f_minus <- numeric(nth)
   for (k in seq_len(nth)) {
@@ -225,29 +189,11 @@ satterthwaite_df <- function(object, method = c("fast", "exact")) {
     }
   }
 
-  # For "exact" mode: sigma's variance from the profiled relationship
-  # Var(sigma) ≈ sigma^2 / (2 * df)  (asymptotic)
   if (method == "exact") {
     df_val <- if (object@REML) (n - p) else n
     vcov_vpar[n_vpar, n_vpar] <- sigma_val^2 / (2 * df_val)
-    # Cross-terms theta-sigma: approximate from numerical Hessian
-    for (k in seq_len(nth)) {
-      theta_p <- theta; theta_p[k] <- theta[k] + h_vec[k]
-      C_fastmlm_deviance(pp, theta_p)
-      sigma_p <- C_fastmlm_result(pp)$sigma
-      theta_m <- theta; theta_m[k] <- theta[k] - h_vec[k]
-      C_fastmlm_deviance(pp, theta_m)
-      sigma_m <- C_fastmlm_result(pp)$sigma
-      # d(sigma)/d(theta_k) ≈ (sigma_p - sigma_m) / (2h)
-      dsigma <- (sigma_p - sigma_m) / (2 * h_vec[k])
-      # Cov(theta_k, sigma) ≈ Var(theta_k) * d(sigma)/d(theta_k)
-      # This is approximate but captures the key covariance
-      vcov_vpar[k, n_vpar] <- 0  # conservative: assume independent
-      vcov_vpar[n_vpar, k] <- 0
-    }
   }
 
-  # Invert Hessian for theta part: vcov = 2 * H^{-1}
   H_theta <- vcov_vpar[seq_len(nth), seq_len(nth), drop = FALSE]
   vcov_theta_inv <- tryCatch(
     2.0 * solve(H_theta),
@@ -261,7 +207,6 @@ satterthwaite_df <- function(object, method = c("fast", "exact")) {
     }
   )
 
-  # Build full vcov of variance parameters
   if (method == "exact") {
     vcov_full <- matrix(0, n_vpar, n_vpar)
     vcov_full[seq_len(nth), seq_len(nth)] <- vcov_theta_inv
@@ -270,7 +215,6 @@ satterthwaite_df <- function(object, method = c("fast", "exact")) {
     vcov_full <- vcov_theta_inv
   }
 
-  # Satterthwaite df for each fixed effect
   df <- numeric(p)
   for (j in seq_len(p)) {
     var_j <- V[j, j]
@@ -292,10 +236,6 @@ satterthwaite_df <- function(object, method = c("fast", "exact")) {
 
 #' emmeans support for fmlmMod
 #'
-#' Methods for \pkg{emmeans} integration. \code{recover_data} returns the
-#' model data and \code{emm_basis} returns the basis for computing
-#' estimated marginal means.
-#'
 #' @param object An \code{fmlmMod} object.
 #' @param data Optional data frame override.
 #' @param trms A terms object.
@@ -308,7 +248,7 @@ satterthwaite_df <- function(object, method = c("fast", "exact")) {
 #' @export
 recover_data.fmlmMod <- function(object, data = NULL, ...) {
   fcall <- object@call
-  trms <- terms(object)  # fixed-effects only (bar terms stripped)
+  trms <- terms(object)
   if (is.null(data)) data <- object@frame
   emmeans::recover_data(fcall, trms, "na.omit", data = data)
 }
@@ -320,7 +260,6 @@ emm_basis.fmlmMod <- function(object, trms, xlev, grid, ...) {
   bhat <- fixef.fmlmMod(object)
   V <- as.matrix(object@vcov_beta)
 
-  # Precompute Satterthwaite df once (avoids calling fixef inside emmeans' namespace)
   sat_df <- tryCatch(satterthwaite_df(object), error = function(e) NULL)
 
   if (!is.null(sat_df)) {
@@ -341,24 +280,14 @@ emm_basis.fmlmMod <- function(object, trms, xlev, grid, ...) {
        dffun = dffun, dfargs = dfargs)
 }
 
-# Register emmeans methods on load if emmeans is available
-.onLoad_emmeans <- function() {
-  if (requireNamespace("emmeans", quietly = TRUE)) {
-    emmeans::.emm_register("fmlmMod", pkgname = "fastmlm")
-  }
-}
-
 # ============================================================================
 # broom.mixed support
 # ============================================================================
 
 #' broom.mixed support for fmlmMod
 #'
-#' Methods for tidy model output compatible with \pkg{broom.mixed}.
-#'
 #' @param x An \code{fmlmMod} object.
-#' @param effects Character vector; which effects to return
-#'   (\code{"fixed"}, \code{"ran_pars"}, or both).
+#' @param effects Character vector; which effects to return.
 #' @param conf.int Logical; include confidence intervals?
 #' @param conf.level Numeric; confidence level.
 #' @param data Optional data frame for augment.

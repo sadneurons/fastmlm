@@ -123,6 +123,28 @@ fmlm <- function(formula, data, REML = TRUE,
   lower   <- as.numeric(lf$lower)
   Gp      <- as.integer(lf$Gp)
 
+  # Extract rcs knots from the model matrix for use in predict()
+  rcs_knots <- list()
+  if (requireNamespace("rms", quietly = TRUE)) {
+    trm_labels <- attr(stats::terms(remove_bars(formula), data = lf$fr),
+                       "term.labels")
+    for (lab in trm_labels) {
+      m <- regmatches(lab, regexec("^rcs\\(([^,]+),\\s*([0-9]+)\\)$", lab))[[1]]
+      if (length(m) == 3) {
+        varname <- m[2]
+        # Get raw variable from the original data (not model frame)
+        raw_var <- tryCatch(data[[varname]], error = function(e) NULL)
+        if (!is.null(raw_var) && is.numeric(raw_var)) {
+          knots <- tryCatch({
+            b <- rms::rcs(raw_var, as.integer(m[3]))
+            attr(b, "parms")
+          }, error = function(e) NULL)
+          if (!is.null(knots)) rcs_knots[[varname]] <- knots
+        }
+      }
+    }
+  }
+
   # PCG threshold from control
   pcg_threshold <- if (!is.null(control$pcg_threshold)) {
     as.integer(control$pcg_threshold)
@@ -156,7 +178,8 @@ fmlm <- function(formula, data, REML = TRUE,
       grad_evals  = result$grad_evaluations,
       iterations  = result$iterations,
       is_crossed  = isTRUE(result$is_crossed),
-      using_pcg   = isTRUE(result$using_pcg)
+      using_pcg   = isTRUE(result$using_pcg),
+      rcs_knots   = rcs_knots
     )
 
     # Package into S4 object
@@ -222,7 +245,8 @@ fmlm <- function(formula, data, REML = TRUE,
       deviance    = opt$value,
       convergence = opt$convergence,
       message     = if (!is.null(opt$message)) opt$message else "converged",
-      fn_evals    = if (!is.null(opt$counts)) opt$counts["function"] else NA_integer_
+      fn_evals    = if (!is.null(opt$counts)) opt$counts["function"] else NA_integer_,
+      rcs_knots   = rcs_knots
     )
 
     methods::new("fmlmMod",

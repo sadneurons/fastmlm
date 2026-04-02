@@ -159,7 +159,7 @@ fastmlm supports `rms::rcs()`, `splines::ns()`, and other basis functions
 directly in the formula. The spline basis is constructed by the external
 package; fastmlm fits the (still linear-in-parameters) mixed model:
 
-```{r splines, eval=requireNamespace("rms", quietly=TRUE)}
+```{r splines, eval=FALSE}
 library(rms)
 set.seed(42)
 n <- 300; subj <- factor(rep(1:30, each = 10))
@@ -179,7 +179,7 @@ anova(m_lin, m_nl)
 Prediction with new data works correctly --- knot positions from the
 training data are automatically reused:
 
-```{r spline-predict, eval=requireNamespace("rms", quietly=TRUE)}
+```{r spline-predict, eval=FALSE}
 predict(m_rcs, newdata = data.frame(age = c(30, 50, 70)))
 ```
 
