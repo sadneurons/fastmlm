@@ -32,6 +32,7 @@ public:
 
     bool is_REML() const { return REML_; }
     bool using_pcg() const { return use_pcg_; }
+    MLMData& data() { return data_; }
 
 private:
     MLMData& data_;

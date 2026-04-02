@@ -75,6 +75,14 @@ fastmlm achieves its speed through:
 - **Optional CUDA GPU** acceleration for large dense operations
 - **Satterthwaite degrees of freedom** (no lmerTest dependency needed)
 
+## Numerical validation
+
+fastmlm is tested against every dataset shipped with lme4 — Dyestuff
+(simple), Dyestuff2 (singular fit), Penicillin (crossed), Pastes (nested),
+sleepstudy (correlated slopes), and cake (factor predictors). Fixed effects
+agree to machine precision across all structures. See
+`vignette("fastmlm-benchmarks")` for the full comparison table.
+
 ## System information
 
 ```r

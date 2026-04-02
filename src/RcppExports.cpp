@@ -76,6 +76,31 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// C_fastmlm_fit_glmm
+Rcpp::List C_fastmlm_fit_glmm(Eigen::Map<Eigen::VectorXd> y, Eigen::Map<Eigen::MatrixXd> X, Eigen::MappedSparseMatrix<double> Zt, Eigen::MappedSparseMatrix<double> Lambdat, Eigen::Map<Eigen::VectorXi> Lind, Eigen::Map<Eigen::VectorXd> theta_start, Eigen::Map<Eigen::VectorXd> lower, Eigen::Map<Eigen::VectorXi> Gp, Eigen::Map<Eigen::VectorXd> prior_weights, std::string family_str, std::string link_str, int maxiter, double ftol, double gtol, int verbose);
+RcppExport SEXP _fastmlm_C_fastmlm_fit_glmm(SEXP ySEXP, SEXP XSEXP, SEXP ZtSEXP, SEXP LambdatSEXP, SEXP LindSEXP, SEXP theta_startSEXP, SEXP lowerSEXP, SEXP GpSEXP, SEXP prior_weightsSEXP, SEXP family_strSEXP, SEXP link_strSEXP, SEXP maxiterSEXP, SEXP ftolSEXP, SEXP gtolSEXP, SEXP verboseSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Eigen::Map<Eigen::VectorXd> >::type y(ySEXP);
+    Rcpp::traits::input_parameter< Eigen::Map<Eigen::MatrixXd> >::type X(XSEXP);
+    Rcpp::traits::input_parameter< Eigen::MappedSparseMatrix<double> >::type Zt(ZtSEXP);
+    Rcpp::traits::input_parameter< Eigen::MappedSparseMatrix<double> >::type Lambdat(LambdatSEXP);
+    Rcpp::traits::input_parameter< Eigen::Map<Eigen::VectorXi> >::type Lind(LindSEXP);
+    Rcpp::traits::input_parameter< Eigen::Map<Eigen::VectorXd> >::type theta_start(theta_startSEXP);
+    Rcpp::traits::input_parameter< Eigen::Map<Eigen::VectorXd> >::type lower(lowerSEXP);
+    Rcpp::traits::input_parameter< Eigen::Map<Eigen::VectorXi> >::type Gp(GpSEXP);
+    Rcpp::traits::input_parameter< Eigen::Map<Eigen::VectorXd> >::type prior_weights(prior_weightsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type family_str(family_strSEXP);
+    Rcpp::traits::input_parameter< std::string >::type link_str(link_strSEXP);
+    Rcpp::traits::input_parameter< int >::type maxiter(maxiterSEXP);
+    Rcpp::traits::input_parameter< double >::type ftol(ftolSEXP);
+    Rcpp::traits::input_parameter< double >::type gtol(gtolSEXP);
+    Rcpp::traits::input_parameter< int >::type verbose(verboseSEXP);
+    rcpp_result_gen = Rcpp::wrap(C_fastmlm_fit_glmm(y, X, Zt, Lambdat, Lind, theta_start, lower, Gp, prior_weights, family_str, link_str, maxiter, ftol, gtol, verbose));
+    return rcpp_result_gen;
+END_RCPP
+}
 // C_fastmlm_blas_info
 Rcpp::List C_fastmlm_blas_info();
 RcppExport SEXP _fastmlm_C_fastmlm_blas_info() {
@@ -114,6 +139,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_fastmlm_C_fastmlm_deviance", (DL_FUNC) &_fastmlm_C_fastmlm_deviance, 2},
     {"_fastmlm_C_fastmlm_result", (DL_FUNC) &_fastmlm_C_fastmlm_result, 1},
     {"_fastmlm_C_fastmlm_fit", (DL_FUNC) &_fastmlm_C_fastmlm_fit, 14},
+    {"_fastmlm_C_fastmlm_fit_glmm", (DL_FUNC) &_fastmlm_C_fastmlm_fit_glmm, 15},
     {"_fastmlm_C_fastmlm_blas_info", (DL_FUNC) &_fastmlm_C_fastmlm_blas_info, 0},
     {"_fastmlm_C_fastmlm_set_threads", (DL_FUNC) &_fastmlm_C_fastmlm_set_threads, 2},
     {"_fastmlm_C_fastmlm_benchmark_blas", (DL_FUNC) &_fastmlm_C_fastmlm_benchmark_blas, 1},

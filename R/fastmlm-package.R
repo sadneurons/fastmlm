@@ -8,9 +8,8 @@
 #' @importFrom stats optim na.omit model.frame model.matrix model.response AIC BIC
 #'   sigma nobs df.residual predict confint terms delete.response reformulate
 #'   qnorm pt coef fitted logLik residuals vcov printCoefmat cov2cor formula
-#'   simulate update anova
-# Define our own S3 generics for fixef/ranef/VarCorr
-# so they work without lme4 loaded
+#'   simulate update anova family pnorm plogis rbinom rpois rnorm binomial
+#'   poisson
 
 #' Extract fixed effects
 #'

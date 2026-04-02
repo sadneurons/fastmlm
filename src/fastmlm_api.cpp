@@ -5,6 +5,7 @@
 #include "blas_detect.h"
 #include "parallel_ops.h"
 #include "gpu_backend.h"
+#include "glmm_deviance.h"
 
 using namespace fastmlm;
 
@@ -135,6 +136,108 @@ Rcpp::List C_fastmlm_fit(Eigen::Map<Eigen::VectorXd> y,
         Rcpp::Named("grad_evaluations") = opt.grad_evaluations,
         Rcpp::Named("using_pcg") = devfun.using_pcg(),
         Rcpp::Named("is_crossed") = data.is_crossed
+    );
+}
+
+// --- GLMM fitting API ---
+
+// [[Rcpp::export]]
+Rcpp::List C_fastmlm_fit_glmm(Eigen::Map<Eigen::VectorXd> y,
+                               Eigen::Map<Eigen::MatrixXd> X,
+                               Eigen::MappedSparseMatrix<double> Zt,
+                               Eigen::MappedSparseMatrix<double> Lambdat,
+                               Eigen::Map<Eigen::VectorXi> Lind,
+                               Eigen::Map<Eigen::VectorXd> theta_start,
+                               Eigen::Map<Eigen::VectorXd> lower,
+                               Eigen::Map<Eigen::VectorXi> Gp,
+                               Eigen::Map<Eigen::VectorXd> prior_weights,
+                               std::string family_str,
+                               std::string link_str,
+                               int maxiter,
+                               double ftol,
+                               double gtol,
+                               int verbose) {
+    // Deep copy
+    VectorXd y_own = y;
+    MatrixXd X_own = X;
+    SpMatd Zt_own = Zt;
+    SpMatd Lambdat_own = Lambdat;
+    VectorXi Lind_own = Lind;
+    VectorXd lower_own = lower;
+    VectorXd theta0 = theta_start;
+    VectorXi Gp_own = Gp;
+
+    // Parse family
+    GLMFamily fam;
+    if (family_str == "binomial")     fam.family = GLMFamily::BINOMIAL;
+    else if (family_str == "poisson") fam.family = GLMFamily::POISSON;
+    else if (family_str == "Gamma")   fam.family = GLMFamily::GAMMA;
+    else Rcpp::stop("Unsupported family: " + family_str);
+
+    if (link_str == "logit")         fam.link = GLMFamily::LOGIT;
+    else if (link_str == "log")      fam.link = GLMFamily::LOG;
+    else if (link_str == "inverse")  fam.link = GLMFamily::INVERSE;
+    else if (link_str == "identity") fam.link = GLMFamily::IDENTITY;
+    else Rcpp::stop("Unsupported link: " + link_str);
+
+    // Build model
+    VectorXd pw = prior_weights;
+
+    MLMData data(y_own, X_own, Zt_own, Lambdat_own, Lind_own, lower_own);
+    data.set_block_structure(Gp_own);
+    PIRLSDeviance devfun(data, fam, pw);
+
+    // Optimise theta via L-BFGS-B
+    // Wrap deviance for the optimizer
+    LBFGSB::ObjFun obj_fn = [&devfun](const VectorXd& theta) -> double {
+        return devfun(theta);
+    };
+
+    // Gradient via forward differences (lambda, no ProfiledDeviance dependency)
+    LBFGSB::GradFun grad_fn = [&devfun](const VectorXd& theta, VectorXd& g) -> double {
+        int nth = theta.size();
+        g.resize(nth);
+        double f0 = devfun(theta);
+        VectorXd theta_p = theta;
+        for (int k = 0; k < nth; ++k) {
+            double h = 1e-7 * std::max(1.0, std::abs(theta[k]));
+            theta_p[k] = theta[k] + h;
+            double fp = devfun(theta_p);
+            g[k] = (fp - f0) / h;
+            theta_p[k] = theta[k];
+        }
+        return f0;
+    };
+
+    LBFGSB::Options opts;
+    opts.max_iterations = maxiter;
+    opts.ftol = ftol;
+    opts.gtol = gtol;
+    opts.verbose = verbose;
+
+    LBFGSB::Result opt = LBFGSB::minimize(obj_fn, grad_fn, theta0, lower_own, opts);
+
+    // Final evaluation
+    devfun(opt.x);
+
+    MatrixXd vbeta = devfun.vcov_beta();
+
+    return Rcpp::List::create(
+        Rcpp::Named("theta") = opt.x,
+        Rcpp::Named("beta") = devfun.beta(),
+        Rcpp::Named("u") = devfun.u(),
+        Rcpp::Named("eta") = devfun.eta(),
+        Rcpp::Named("mu") = devfun.mu(),
+        Rcpp::Named("deviance") = devfun.deviance(),
+        Rcpp::Named("vcov_beta") = vbeta,
+        Rcpp::Named("ldL2") = devfun.ldL2(),
+        Rcpp::Named("convergence") = opt.convergence,
+        Rcpp::Named("message") = opt.message,
+        Rcpp::Named("iterations") = opt.iterations,
+        Rcpp::Named("fn_evaluations") = opt.fn_evaluations,
+        Rcpp::Named("pirls_iterations") = devfun.pirls_iterations(),
+        Rcpp::Named("family") = family_str,
+        Rcpp::Named("link") = link_str
     );
 }
 

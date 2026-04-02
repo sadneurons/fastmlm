@@ -11,4 +11,5 @@ CXX_STD = CXX17
 OBJECTS = RcppExports.o fastmlm_api.o model_data.o profiled_deviance.o \
           sparse_cholesky.o cholmod_wrapper.o cholmod_stubs.o \
           theta_optimizer.o lbfgsb.o autodiff.o vcov_hessian.o \
-          crossed_re.o parallel_ops.o blas_detect.o @GPU_OBJECT@.o
+          crossed_re.o parallel_ops.o blas_detect.o \
+          glmm_deviance.o @GPU_OBJECT@.o

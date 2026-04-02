@@ -8,6 +8,12 @@
                      envir = asNamespace("lme4"))
     registerS3method("VarCorr", "fmlmMod", VarCorr.fmlmMod,
                      envir = asNamespace("lme4"))
+    registerS3method("fixef", "fglmmMod", fixef.fglmmMod,
+                     envir = asNamespace("lme4"))
+    registerS3method("ranef", "fglmmMod", ranef.fglmmMod,
+                     envir = asNamespace("lme4"))
+    registerS3method("VarCorr", "fglmmMod", VarCorr.fglmmMod,
+                     envir = asNamespace("lme4"))
   }
 
   # Register emmeans methods if emmeans is available
@@ -36,6 +42,12 @@
     registerS3method("ranef", "fmlmMod", ranef.fmlmMod,
                      envir = asNamespace("lme4"))
     registerS3method("VarCorr", "fmlmMod", VarCorr.fmlmMod,
+                     envir = asNamespace("lme4"))
+    registerS3method("fixef", "fglmmMod", fixef.fglmmMod,
+                     envir = asNamespace("lme4"))
+    registerS3method("ranef", "fglmmMod", ranef.fglmmMod,
+                     envir = asNamespace("lme4"))
+    registerS3method("VarCorr", "fglmmMod", VarCorr.fglmmMod,
                      envir = asNamespace("lme4"))
   })
 }

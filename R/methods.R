@@ -37,7 +37,7 @@ ranef.fmlmMod <- function(object, ...) {
     idx_end   <- Gp[i + 1L]
     bi <- b[idx_start:idx_end]
 
-    mat <- matrix(bi, nrow = nlevs, ncol = ncols, byrow = FALSE)
+    mat <- matrix(bi, nrow = nlevs, ncol = ncols, byrow = TRUE)
     colnames(mat) <- cnames
     rownames(mat) <- levels(fac)
 

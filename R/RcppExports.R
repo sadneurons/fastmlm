@@ -17,6 +17,10 @@ C_fastmlm_fit <- function(y, X, Zt, Lambdat, Lind, theta_start, lower, Gp, REML,
     .Call(`_fastmlm_C_fastmlm_fit`, y, X, Zt, Lambdat, Lind, theta_start, lower, Gp, REML, maxiter, ftol, gtol, pcg_threshold, verbose)
 }
 
+C_fastmlm_fit_glmm <- function(y, X, Zt, Lambdat, Lind, theta_start, lower, Gp, prior_weights, family_str, link_str, maxiter, ftol, gtol, verbose) {
+    .Call(`_fastmlm_C_fastmlm_fit_glmm`, y, X, Zt, Lambdat, Lind, theta_start, lower, Gp, prior_weights, family_str, link_str, maxiter, ftol, gtol, verbose)
+}
+
 C_fastmlm_blas_info <- function() {
     .Call(`_fastmlm_C_fastmlm_blas_info`)
 }

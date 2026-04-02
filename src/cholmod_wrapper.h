@@ -40,7 +40,7 @@ private:
     int cached_nnz_;
 
     // Aligned storage for cholmod_common (~2680 bytes on 64-bit)
-    alignas(16) char common_storage_[4096];
+    alignas(16) char common_storage_[8192];
 
     cholmod_common& common() { return *reinterpret_cast<cholmod_common*>(common_storage_); }
     const cholmod_common& common() const { return *reinterpret_cast<const cholmod_common*>(common_storage_); }
