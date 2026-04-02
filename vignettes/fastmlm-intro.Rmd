@@ -153,6 +153,36 @@ em
 pairs(em)
 ```
 
+## Nonlinear effects with restricted cubic splines
+
+fastmlm supports `rms::rcs()`, `splines::ns()`, and other basis functions
+directly in the formula. The spline basis is constructed by the external
+package; fastmlm fits the (still linear-in-parameters) mixed model:
+
+```{r splines, eval=requireNamespace("rms", quietly=TRUE)}
+library(rms)
+set.seed(42)
+n <- 300; subj <- factor(rep(1:30, each = 10))
+age <- runif(n, 20, 80)
+y <- 5 + 0.01 * (age - 50)^2 + rnorm(30, sd = 3)[subj] + rnorm(n, sd = 2)
+d <- data.frame(y = y, age = age, subj = subj)
+
+m_rcs <- fmlm(y ~ rcs(age, 4) + (1 | subj), data = d)
+m_rcs
+
+# Test nonlinearity via likelihood ratio test
+m_lin <- fmlm(y ~ age + (1 | subj), data = d, REML = FALSE)
+m_nl  <- fmlm(y ~ rcs(age, 4) + (1 | subj), data = d, REML = FALSE)
+anova(m_lin, m_nl)
+```
+
+Prediction with new data works correctly --- knot positions from the
+training data are automatically reused:
+
+```{r spline-predict, eval=requireNamespace("rms", quietly=TRUE)}
+predict(m_rcs, newdata = data.frame(age = c(30, 50, 70)))
+```
+
 ## Working with broom.mixed
 
 Tidy output is available:

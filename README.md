@@ -35,6 +35,15 @@ VarCorr(m)
 confint(m)
 AIC(m)
 
+# GLMMs
+library(lme4)
+m_glmm <- fglmm(cbind(incidence, size - incidence) ~ period + (1 | herd),
+                 data = cbpp, family = binomial())
+
+# Nonlinear effects with restricted cubic splines
+library(rms)
+m_rcs <- fmlm(y ~ rcs(age, 5) + (1 | subject), data = mydata)
+
 # emmeans integration
 library(emmeans)
 emmeans(m, ~ Days, at = list(Days = c(0, 5, 9)))

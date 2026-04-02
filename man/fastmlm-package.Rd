@@ -6,7 +6,7 @@
 \alias{fastmlm-package}
 \title{fastmlm: Fast Estimation of Multilevel Linear Models}
 \description{
-Fits linear mixed-effects models 4-14x faster than 'lme4' using a high-performance C++ backend. Features include a custom formula parser, formula/data caching for repeated fits (bootstrap, simulation), a C++ L-BFGS-B optimiser with gradient computation, CHOLMOD supernodal sparse Cholesky factorisation (via the 'Matrix' package), precomputed sparse matrix mappings for zero-allocation deviance updates, optional GPU acceleration via CUDA, Satterthwaite degrees of freedom, and integration with 'emmeans' and 'broom.mixed'. Provides a drop-in interface using the same formula syntax as lmer() from 'lme4'.
+Fits linear and generalised linear mixed-effects models 4-14x faster than 'lme4' using a high-performance C++ backend. Supports LMMs via fmlm() and GLMMs (binomial, Poisson, Gamma) via fglmm(). Features include a custom formula parser, formula/data caching for repeated fits (bootstrap, simulation), a C++ L-BFGS-B optimiser, CHOLMOD supernodal sparse Cholesky factorisation (via 'Matrix'), precomputed sparse matrix mappings, optional CUDA GPU acceleration, Satterthwaite degrees of freedom (with exact mode matching 'lmerTest'), restricted cubic splines via 'rms', and integration with 'emmeans' and 'broom.mixed'. Provides a drop-in interface using the same formula syntax as lmer() and glmer() from 'lme4'.
 }
 \seealso{
 Useful links:

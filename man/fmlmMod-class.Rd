@@ -24,7 +24,7 @@
 
 \S4method{show}{fmlmMod}(object)
 
-\S4method{summary}{fmlmMod}(object, ...)
+\S4method{summary}{fmlmMod}(object, ddf = "fast", ...)
 }
 \arguments{
 \item{object}{An \code{fmlmMod} object.}
@@ -32,6 +32,12 @@
 \item{...}{Additional arguments (ignored).}
 
 \item{type}{Character; type of residuals (currently only \code{"response"}).}
+
+\item{ddf}{Character; method for denominator degrees of freedom.
+\code{"fast"} (default) uses numerical central differences.
+\code{"exact"} includes sigma in the variance parameter vector
+for closer agreement with lmerTest.
+\code{"none"} suppresses df and p-values.}
 }
 \description{
 S4 class for fastmlm model fit

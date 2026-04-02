@@ -4,10 +4,16 @@
 \alias{satterthwaite_df}
 \title{Compute Satterthwaite degrees of freedom for fixed effects}
 \usage{
-satterthwaite_df(object)
+satterthwaite_df(object, method = c("fast", "exact"))
 }
 \arguments{
 \item{object}{An \code{fmlmMod} object.}
+
+\item{method}{Character; \code{"fast"} (default) uses numerical
+central differences for the Jacobian of vcov(beta) w.r.t. theta.
+\code{"exact"} uses a finer step size and more precise Hessian,
+matching lmerTest's analytical results more closely at the cost
+of additional deviance evaluations.}
 }
 \value{
 A numeric vector of degrees of freedom, one per fixed effect.
