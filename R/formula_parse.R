@@ -64,14 +64,50 @@ extract_bars <- function(formula) {
   find_bars <- function(expr) {
     if (is.call(expr)) {
       if (identical(expr[[1]], as.name("|"))) {
-        # Found a bar: LHS | RHS
         lhs <- expr[[2]]
         rhs <- expr[[3]]
-        bars[[length(bars) + 1L]] <<- list(
-          lhs = lhs,
-          rhs = rhs,
-          group = deparse(rhs)
-        )
+        # Check for nested syntax: (1 | a/b) => (1 | a) + (1 | a:b)
+        if (is.call(rhs) && identical(rhs[[1]], as.name("/"))) {
+          a <- rhs[[2]]
+          b <- rhs[[3]]
+          bars[[length(bars) + 1L]] <<- list(
+            lhs = lhs, rhs = a, group = deparse(a), uncorrelated = FALSE)
+          interaction_expr <- call(":", a, b)
+          bars[[length(bars) + 1L]] <<- list(
+            lhs = lhs, rhs = interaction_expr,
+            group = deparse(interaction_expr), uncorrelated = FALSE)
+        } else {
+          bars[[length(bars) + 1L]] <<- list(
+            lhs = lhs, rhs = rhs, group = deparse(rhs), uncorrelated = FALSE)
+        }
+      } else if (identical(expr[[1]], as.name("||"))) {
+        # Double bar: uncorrelated random slopes
+        # (1 + x || group) expands to (1 | group) + (0 + x | group)
+        lhs <- expr[[2]]
+        rhs <- expr[[3]]
+        grp <- deparse(rhs)
+
+        # Parse LHS terms
+        lhs_str <- deparse(lhs)
+        lhs_terms <- trimws(strsplit(lhs_str, "\\+")[[1]])
+
+        for (term in lhs_terms) {
+          if (term %in% c("1", "")) {
+            bars[[length(bars) + 1L]] <<- list(
+              lhs = quote(1), rhs = rhs, group = grp, uncorrelated = TRUE)
+          } else {
+            bars[[length(bars) + 1L]] <<- list(
+              lhs = str2lang(paste0("0 + ", term)),
+              rhs = rhs, group = grp, uncorrelated = TRUE)
+          }
+        }
+      } else if (identical(expr[[1]], as.name("/"))) {
+        # Nested: (1 | a/b) => (1 | a) + (1 | a:b)
+        # This is handled at the | level when we detect / in the RHS
+        # Just recurse normally
+        for (i in seq_along(expr)[-1]) {
+          find_bars(expr[[i]])
+        }
       } else {
         for (i in seq_along(expr)[-1]) {
           find_bars(expr[[i]])

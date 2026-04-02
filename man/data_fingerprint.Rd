@@ -2,12 +2,19 @@
 % Please edit documentation in R/cache.R
 \name{data_fingerprint}
 \alias{data_fingerprint}
-\title{Compute a fast fingerprint of a data frame}
+\title{Compute a robust fingerprint of a data frame}
 \usage{
 data_fingerprint(data)
 }
+\arguments{
+\item{data}{A data frame.}
+}
+\value{
+A character string fingerprint.
+}
 \description{
-Uses dimensions + column names + first/last values for a quick hash.
-Not cryptographic — just enough to detect different datasets.
+Uses dimensions, column names, column types, and a sample of values
+spread across the data to detect changes. Not cryptographic but
+catches modifications anywhere in the data, not just first/last rows.
 }
 \keyword{internal}

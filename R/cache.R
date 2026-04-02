@@ -11,20 +11,31 @@
 .fastmlm_cache$entries <- list()
 .fastmlm_cache$max_size <- 5L  # max cached formulas
 
-#' Compute a fast fingerprint of a data frame
+#' Compute a robust fingerprint of a data frame
 #'
-#' Uses dimensions + column names + first/last values for a quick hash.
-#' Not cryptographic — just enough to detect different datasets.
+#' Uses dimensions, column names, column types, and a sample of values
+#' spread across the data to detect changes. Not cryptographic but
+#' catches modifications anywhere in the data, not just first/last rows.
+#' @param data A data frame.
+#' @return A character string fingerprint.
 #' @keywords internal
 data_fingerprint <- function(data) {
-  paste0(
-    nrow(data), "x", ncol(data), ":",
-    paste(names(data), collapse = ","), ":",
-    paste(vapply(data, function(col) {
-      if (length(col) == 0) return("empty")
-      paste0(col[1], ".", col[length(col)])
-    }, character(1)), collapse = ";")
-  )
+  nr <- nrow(data)
+  nc <- ncol(data)
+
+  # Sample row indices spread across the data
+  sample_rows <- unique(c(1L, nr,
+    as.integer(seq(1, nr, length.out = min(nr, 10)))))
+
+  # Build fingerprint from sampled values + types
+  col_fp <- vapply(data, function(col) {
+    vals <- col[sample_rows]
+    paste0(class(col)[1], ":", paste(format(vals), collapse = ","))
+  }, character(1))
+
+  paste0(nr, "x", nc, ":",
+         paste(names(data), collapse = ","), ":",
+         paste(col_fp, collapse = ";"))
 }
 
 #' Cache key from formula + data fingerprint

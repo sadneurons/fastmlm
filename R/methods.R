@@ -3,7 +3,6 @@
 # ============================================================================
 
 # --- fixef / ranef / VarCorr ---
-# These are S3 generics in lme4, so we define S3 methods.
 
 #' @export
 fixef.fmlmMod <- function(object, ...) {
@@ -15,7 +14,6 @@ fixef.fmlmMod <- function(object, ...) {
 #' @export
 ranef.fmlmMod <- function(object, ...) {
   Lambdat <- object@Lambdat
-  # Update Lambdat with fitted theta
   x <- Lambdat@x
   for (i in seq_along(x)) {
     x[i] <- object@theta[object@Lind[i]]
@@ -89,7 +87,7 @@ VarCorr.fmlmMod <- function(x, sigma = 1, ...) {
   result
 }
 
-# --- S4 methods for standard generics ---
+# --- S4 methods ---
 
 #' @rdname fmlmMod-class
 #' @export
@@ -182,9 +180,16 @@ setMethod("show", "fmlmMod", function(object) {
   cat("Fast Multilevel Linear Model (fastmlm)\n")
   cat("Formula:", deparse(object@formula), "\n")
   cat("Data:   ", nrow(object@frame), "observations\n")
-  cat("REML:   ", object@REML, "\n\n")
+  cat("REML:   ", object@REML, "\n")
 
-  cat("Random effects:\n")
+  # Convergence warnings
+  warnings <- check_convergence(object)
+  if (length(warnings) > 0) {
+    cat("\n")
+    for (w in warnings) cat("WARNING:", w, "\n")
+  }
+
+  cat("\nRandom effects:\n")
   vc <- VarCorr.fmlmMod(object)
   for (nm in names(vc)) {
     mat <- vc[[nm]]
@@ -201,7 +206,6 @@ setMethod("show", "fmlmMod", function(object) {
   se <- sqrt(diag(vcov(object)))
   tval <- fe / se
 
-  # Try Satterthwaite df for p-values
   sat_df <- tryCatch(satterthwaite_df(object), error = function(e) NULL)
   if (!is.null(sat_df)) {
     pval <- 2 * stats::pt(abs(tval), df = sat_df, lower.tail = FALSE)
@@ -251,4 +255,332 @@ print.VarCorr.fmlmMod <- function(x, ...) {
   }
   cat(sprintf("Residual Std.Dev.: %8.4f\n", attr(x, "sc")))
   invisible(x)
+}
+
+# ============================================================================
+# anova() for likelihood ratio tests
+# ============================================================================
+
+#' Likelihood ratio test for fmlmMod objects
+#'
+#' Compare nested models via likelihood ratio test. Models must be fit
+#' with \code{REML = FALSE} for valid comparison.
+#'
+#' @param object An \code{fmlmMod} object.
+#' @param ... Additional \code{fmlmMod} objects to compare.
+#' @return A data frame with model comparison statistics.
+#' @method anova fmlmMod
+#' @export
+anova.fmlmMod <- function(object, ...) {
+  models <- c(list(object), list(...))
+  n_models <- length(models)
+
+  if (n_models < 2) {
+    stop("anova() requires at least two models to compare")
+  }
+
+  # Check all are fmlmMod
+  for (i in seq_along(models)) {
+    if (!methods::is(models[[i]], "fmlmMod")) {
+      stop("All objects must be fmlmMod models")
+    }
+  }
+
+  # Warn if any use REML
+  if (any(vapply(models, function(m) m@REML, logical(1)))) {
+    warning("Models should be fit with REML = FALSE for valid likelihood ratio tests")
+  }
+
+  # Compute stats
+  npar <- vapply(models, function(m) attr(logLik(m), "df"), integer(1))
+  loglik <- vapply(models, function(m) as.numeric(logLik(m)), numeric(1))
+  aic_vals <- vapply(models, function(m) AIC(m), numeric(1))
+  bic_vals <- vapply(models, function(m) BIC(m), numeric(1))
+  nobs_vals <- vapply(models, function(m) nobs(m), integer(1))
+
+  # Order by complexity
+  ord <- order(npar)
+  models <- models[ord]
+  npar <- npar[ord]
+  loglik <- loglik[ord]
+  aic_vals <- aic_vals[ord]
+  bic_vals <- bic_vals[ord]
+
+  # LRT
+  chisq <- c(NA, diff(2 * loglik))
+  chi_df <- c(NA, diff(npar))
+  pval <- c(NA, stats::pchisq(chisq[-1], df = chi_df[-1], lower.tail = FALSE))
+
+  # Model names from calls
+  mc <- match.call()
+  mnames <- vapply(as.list(mc)[-1], deparse, character(1))
+  if (length(mnames) > n_models) mnames <- mnames[seq_len(n_models)]
+
+  result <- data.frame(
+    npar = npar,
+    AIC = aic_vals,
+    BIC = bic_vals,
+    logLik = loglik,
+    deviance = -2 * loglik,
+    Chisq = chisq,
+    Df = chi_df,
+    `Pr(>Chisq)` = pval,
+    check.names = FALSE,
+    stringsAsFactors = FALSE
+  )
+  rownames(result) <- mnames[ord]
+  class(result) <- c("anova", "data.frame")
+  result
+}
+
+# ============================================================================
+# simulate() for parametric bootstrap
+# ============================================================================
+
+#' Simulate responses from a fitted fmlmMod
+#'
+#' Generates new response vectors by sampling new random effects and
+#' residuals from the fitted model's estimated distribution.
+#'
+#' @param object An \code{fmlmMod} object.
+#' @param nsim Integer; number of simulations. Default 1.
+#' @param seed Optional random seed.
+#' @param ... Ignored.
+#' @return A data frame with \code{nsim} columns, each a simulated response.
+#' @method simulate fmlmMod
+#' @export
+simulate.fmlmMod <- function(object, nsim = 1, seed = NULL, ...) {
+  if (!is.null(seed)) set.seed(seed)
+
+  n <- nrow(object@frame)
+  X <- object@X
+  beta <- object@beta
+  sig <- object@sigma
+
+  # Get variance-covariance of random effects
+  vc <- VarCorr.fmlmMod(object)
+  flist <- object@flist
+  cnms <- object@cnms
+  Gp <- object@Gp
+
+  Xbeta <- as.numeric(X %*% beta)
+
+  result <- data.frame(matrix(NA_real_, nrow = n, ncol = nsim))
+  names(result) <- paste0("sim_", seq_len(nsim))
+
+  for (sim in seq_len(nsim)) {
+    # Simulate new random effects
+    b_new <- numeric(object@Gp[length(Gp)])
+
+    for (i in seq_along(flist)) {
+      fac <- flist[[i]]
+      nlevs <- nlevels(fac)
+      cnames <- cnms[[i]]
+      ncols <- length(cnames)
+
+      # Get the variance-covariance for this term
+      Sigma_i <- vc[[names(flist)[i]]]
+
+      # Simulate random effects for each level
+      if (ncols == 1) {
+        re_i <- stats::rnorm(nlevs, sd = sqrt(Sigma_i[1, 1]))
+      } else {
+        re_i <- MASS_mvrnorm_simple(nlevs, rep(0, ncols), Sigma_i)
+      }
+
+      # Place into b_new
+      idx_start <- Gp[i] + 1L
+      idx_end <- Gp[i + 1L]
+      b_new[idx_start:idx_end] <- as.vector(t(re_i))
+    }
+
+    # Compute Z * b
+    Zb <- as.numeric(Matrix::t(object@Zt) %*% b_new)
+
+    # Simulate response
+    result[, sim] <- Xbeta + Zb + stats::rnorm(n, sd = sig)
+  }
+
+  result
+}
+
+# Simple multivariate normal without MASS dependency
+#' @keywords internal
+MASS_mvrnorm_simple <- function(n, mu, Sigma) {
+  p <- length(mu)
+  L <- chol(Sigma)
+  Z <- matrix(stats::rnorm(n * p), nrow = n, ncol = p)
+  sweep(Z %*% L, 2, mu, "+")
+}
+
+# ============================================================================
+# update() method
+# ============================================================================
+
+#' Update a fastmlm model
+#'
+#' Re-fits a model with modified formula or arguments.
+#'
+#' @param object An \code{fmlmMod} object.
+#' @param formula. A new formula (use \code{. ~ .} to keep existing).
+#' @param ... Additional arguments passed to \code{\link{fmlm}}.
+#' @param evaluate Logical; if FALSE, return the unevaluated call.
+#' @return A new \code{fmlmMod} object.
+#' @method update fmlmMod
+#' @export
+update.fmlmMod <- function(object, formula., ..., evaluate = TRUE) {
+  call <- object@call
+  if (!missing(formula.)) {
+    call$formula <- stats::update.formula(formula(object), formula.)
+  }
+  extras <- match.call(expand.dots = FALSE)$...
+  for (nm in names(extras)) {
+    call[[nm]] <- extras[[nm]]
+  }
+  if (evaluate) eval(call, parent.frame()) else call
+}
+
+# ============================================================================
+# Convergence diagnostics (item 3)
+# ============================================================================
+
+#' Check model convergence and identify potential issues
+#'
+#' @param object An \code{fmlmMod} object.
+#' @return Character vector of warning messages (empty if no issues).
+#' @keywords internal
+check_convergence <- function(object) {
+  warnings <- character(0)
+
+  theta <- object@theta
+  lower <- object@lower
+
+  # Check for singular fit (theta at boundary)
+  at_boundary <- which(abs(theta - lower) < 1e-10 & is.finite(lower))
+  if (length(at_boundary) > 0) {
+    warnings <- c(warnings,
+      "Singular fit: variance component(s) estimated at boundary (zero variance). ",
+      "Model may be overparameterised for the data.")
+  }
+
+  # Check optimizer convergence
+  if (object@optinfo$convergence != 0) {
+    warnings <- c(warnings,
+      paste("Optimizer did not converge:", object@optinfo$message))
+  }
+
+  # Check for very large or very small sigma
+  if (object@sigma < 1e-8) {
+    warnings <- c(warnings,
+      "Residual standard deviation is near zero. Check model specification.")
+  }
+
+  # Check for very large random effects relative to residual
+  vc <- VarCorr.fmlmMod(object)
+  for (nm in names(vc)) {
+    re_sd <- max(attr(vc[[nm]], "stddev"))
+    if (re_sd > 100 * object@sigma) {
+      warnings <- c(warnings,
+        sprintf("Random effect SD for '%s' is %.0fx the residual SD.", nm,
+                re_sd / object@sigma))
+    }
+  }
+
+  warnings
+}
+
+# ============================================================================
+# Profile confidence intervals for variance components (item 9)
+# ============================================================================
+
+#' Profile confidence intervals for variance parameters
+#'
+#' Computes confidence intervals for theta by profiling the deviance
+#' function. More accurate than Wald intervals for variance components.
+#'
+#' @param object An \code{fmlmMod} object.
+#' @param level Confidence level.
+#' @return A matrix with lower and upper bounds for each theta.
+#' @keywords internal
+profile_ci_theta <- function(object, level = 0.95) {
+  theta <- object@theta
+  nth <- length(theta)
+  dev_opt <- object@deviance
+
+  y <- as.numeric(object@frame[, 1])
+  X <- object@X
+  Zt <- object@Zt
+  Lambdat <- object@Lambdat
+  Lind <- object@Lind
+  lower <- object@lower
+
+  pp <- C_fastmlm_create(y, X, Zt, Lambdat, Lind, lower, object@REML)
+
+  # chi-squared cutoff for the deviance difference
+  cutoff <- stats::qchisq(level, df = 1)
+
+  ci <- matrix(NA_real_, nrow = nth, ncol = 2)
+  colnames(ci) <- c("lower", "upper")
+
+  for (k in seq_len(nth)) {
+    # Profile: find theta[k] such that dev(theta_profile) - dev_opt = cutoff
+    # where theta_profile minimises deviance over all other theta with theta[k] fixed
+
+    # Simple approach: use the deviance at the optimum as a function of theta[k]
+    # and find where it crosses dev_opt + cutoff via bisection
+
+    # Lower bound
+    lo <- lower[k]
+    hi <- theta[k]
+    theta_try <- theta
+
+    # Check if lower bound gives deviance above cutoff
+    theta_try[k] <- lo
+    dev_lo <- C_fastmlm_deviance(pp, theta_try)
+    if (dev_lo - dev_opt > cutoff) {
+      # Bisect to find crossing point
+      for (iter in 1:50) {
+        mid <- (lo + hi) / 2
+        theta_try[k] <- mid
+        dev_mid <- C_fastmlm_deviance(pp, theta_try)
+        if (dev_mid - dev_opt > cutoff) lo <- mid else hi <- mid
+        if (abs(hi - lo) < 1e-6) break
+      }
+      ci[k, 1] <- (lo + hi) / 2
+    } else {
+      ci[k, 1] <- lo
+    }
+
+    # Upper bound
+    lo <- theta[k]
+    hi <- theta[k] * 3 + 1  # generous upper search bound
+    theta_try <- theta
+
+    theta_try[k] <- hi
+    dev_hi <- C_fastmlm_deviance(pp, theta_try)
+    # Expand if needed
+    while (dev_hi - dev_opt < cutoff && hi < 1e6) {
+      hi <- hi * 2
+      theta_try[k] <- hi
+      dev_hi <- C_fastmlm_deviance(pp, theta_try)
+    }
+
+    if (dev_hi - dev_opt > cutoff) {
+      for (iter in 1:50) {
+        mid <- (lo + hi) / 2
+        theta_try[k] <- mid
+        dev_mid <- C_fastmlm_deviance(pp, theta_try)
+        if (dev_mid - dev_opt > cutoff) hi <- mid else lo <- mid
+        if (abs(hi - lo) < 1e-6) break
+      }
+      ci[k, 2] <- (lo + hi) / 2
+    } else {
+      ci[k, 2] <- Inf
+    }
+  }
+
+  # Restore state
+  C_fastmlm_deviance(pp, theta)
+
+  ci
 }

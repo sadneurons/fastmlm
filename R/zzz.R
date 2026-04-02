@@ -1,4 +1,15 @@
 .onLoad <- function(libname, pkgname) {
+  # Register our S3 methods with lme4's generics if lme4 is loaded
+  # (so fixef(fastmlm_obj) works regardless of load order)
+  if (isNamespaceLoaded("lme4")) {
+    registerS3method("fixef", "fmlmMod", fixef.fmlmMod,
+                     envir = asNamespace("lme4"))
+    registerS3method("ranef", "fmlmMod", ranef.fmlmMod,
+                     envir = asNamespace("lme4"))
+    registerS3method("VarCorr", "fmlmMod", VarCorr.fmlmMod,
+                     envir = asNamespace("lme4"))
+  }
+
   # Register emmeans methods if emmeans is available
   if (requireNamespace("emmeans", quietly = TRUE)) {
     emmeans::.emm_register("fmlmMod", pkgname = "fastmlm")
@@ -15,6 +26,18 @@
   register_if("tidy", "fmlmMod", tidy.fmlmMod)
   register_if("glance", "fmlmMod", glance.fmlmMod)
   register_if("augment", "fmlmMod", augment.fmlmMod)
+}
+
+# Also register when lme4 is loaded after us
+.onAttach <- function(libname, pkgname) {
+  setHook(packageEvent("lme4", "onLoad"), function(...) {
+    registerS3method("fixef", "fmlmMod", fixef.fmlmMod,
+                     envir = asNamespace("lme4"))
+    registerS3method("ranef", "fmlmMod", ranef.fmlmMod,
+                     envir = asNamespace("lme4"))
+    registerS3method("VarCorr", "fmlmMod", VarCorr.fmlmMod,
+                     envir = asNamespace("lme4"))
+  })
 }
 
 #' Report BLAS and system information

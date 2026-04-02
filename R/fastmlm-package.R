@@ -8,35 +8,36 @@
 #' @importFrom stats optim na.omit model.frame model.matrix model.response AIC BIC
 #'   sigma nobs df.residual predict confint terms delete.response reformulate
 #'   qnorm pt coef fitted logLik residuals vcov printCoefmat cov2cor formula
-#' @importFrom lme4 lFormula lmerControl fixef ranef VarCorr
-#'
-#' @name fixef
-#' @rdname reexports
-#' @keywords internal
-#' @export
-NULL
+#'   simulate update anova
+# Define our own S3 generics for fixef/ranef/VarCorr
+# so they work without lme4 loaded
 
-#' @name ranef
-#' @rdname reexports
-#' @keywords internal
-#' @export
-NULL
-
-#' @name VarCorr
-#' @rdname reexports
-#' @keywords internal
-#' @export
-NULL
-
-#' Re-exported functions from lme4
+#' Extract fixed effects
 #'
-#' These generics are imported from \pkg{lme4} and re-exported so that
-#' \code{fixef()}, \code{ranef()}, and \code{VarCorr()} work without
-#' explicitly loading lme4.
+#' Generic function to extract fixed-effect coefficients from a
+#' fitted mixed model.
 #'
-#' @name reexports
-#' @keywords internal
-NULL
+#' @param object A fitted model object.
+#' @param ... Additional arguments.
+#' @return Named numeric vector of fixed-effect coefficients.
+#' @rdname fixef
+#' @export
+fixef <- function(object, ...) UseMethod("fixef")
+
+#' Extract random effects
+#' @param object A fitted model object.
+#' @param ... Additional arguments.
+#' @return A list of data frames, one per grouping factor.
+#' @export
+ranef <- function(object, ...) UseMethod("ranef")
+
+#' Extract variance-covariance of random effects
+#' @param x A fitted model object.
+#' @param sigma Residual standard deviation (used for scaling).
+#' @param ... Additional arguments.
+#' @return A list of variance-covariance matrices.
+#' @export
+VarCorr <- function(x, sigma = 1, ...) UseMethod("VarCorr")
 #' @useDynLib fastmlm, .registration = TRUE
 ## usethis namespace: end
 NULL

@@ -46,6 +46,10 @@ fmlm <- function(formula, data, REML = TRUE,
       fast_lFormula(formula, data, REML = REML,
                     na.action = na.action, contrasts = contrasts),
       error = function(e) {
+        if (!requireNamespace("lme4", quietly = TRUE)) {
+          stop("Formula parsing failed and lme4 is not installed for fallback: ",
+               conditionMessage(e), call. = FALSE)
+        }
         if (verbose > 0L) {
           message("fastmlm: fast parser failed (", conditionMessage(e),
                   "), falling back to lme4::lFormula")
@@ -87,6 +91,31 @@ fmlm <- function(formula, data, REML = TRUE,
   # Extract components
   y       <- as.numeric(lf$fr[, 1])
   X       <- as.matrix(lf$X)
+
+  # Apply prior weights if specified
+  if (!is.null(weights)) {
+    if (is.character(weights)) weights <- lf$fr[[weights]]
+    w <- as.numeric(weights)
+    if (length(w) != length(y)) stop("weights must have same length as data")
+    if (any(w < 0)) stop("weights must be non-negative")
+    sqrtw <- sqrt(w)
+    y <- y * sqrtw
+    X <- X * sqrtw
+    # Scale Z columns too
+    # Zt is q x n, scale columns (observations) by sqrtw
+    Zt_scaled <- lf$Zt
+    for (j in seq_along(sqrtw)) {
+      # Scale column j of Z (= row j of Zt... but Zt is CSC so column j)
+      # Actually Zt is stored as dgCMatrix (CSC). Column j of Zt corresponds
+      # to observation j. We need to scale the values in column j.
+      idx_start <- Zt_scaled@p[j] + 1L
+      idx_end <- Zt_scaled@p[j + 1L]
+      if (idx_end >= idx_start) {
+        Zt_scaled@x[idx_start:idx_end] <- Zt_scaled@x[idx_start:idx_end] * sqrtw[j]
+      }
+    }
+    lf$Zt <- Zt_scaled
+  }
   Zt      <- lf$Zt
   Lambdat <- lf$Lambdat
   Lind    <- as.integer(lf$Lind)
