@@ -175,14 +175,23 @@ logLik.fmlmMod <- function(object, ...) {
 }
 
 #' @rdname fmlmMod-class
+#' @param ddf Character; method for denominator degrees of freedom.
+#'   \code{"fast"} (default) uses numerical central differences.
+#'   \code{"exact"} includes sigma in the variance parameter vector
+#'   for closer agreement with lmerTest.
+#'   \code{"none"} suppresses df and p-values.
 #' @export
 setMethod("show", "fmlmMod", function(object) {
+  show_fmlmMod(object, ddf = "fast")
+})
+
+#' @keywords internal
+show_fmlmMod <- function(object, ddf = "fast") {
   cat("Fast Multilevel Linear Model (fastmlm)\n")
   cat("Formula:", deparse(object@formula), "\n")
   cat("Data:   ", nrow(object@frame), "observations\n")
   cat("REML:   ", object@REML, "\n")
 
-  # Convergence warnings
   warnings <- check_convergence(object)
   if (length(warnings) > 0) {
     cat("\n")
@@ -206,7 +215,13 @@ setMethod("show", "fmlmMod", function(object) {
   se <- sqrt(diag(vcov(object)))
   tval <- fe / se
 
-  sat_df <- tryCatch(satterthwaite_df(object), error = function(e) NULL)
+  sat_df <- NULL
+  if (ddf != "none") {
+    sat_df <- tryCatch(
+      satterthwaite_df(object, method = ddf),
+      error = function(e) NULL
+    )
+  }
   if (!is.null(sat_df)) {
     pval <- 2 * stats::pt(abs(tval), df = sat_df, lower.tail = FALSE)
     coef_tab <- cbind(Estimate = fe, `Std. Error` = se, df = sat_df,
@@ -222,12 +237,12 @@ setMethod("show", "fmlmMod", function(object) {
       "| Convergence:", object@optinfo$convergence, "\n")
 
   invisible(object)
-})
+}
 
 #' @rdname fmlmMod-class
 #' @export
-setMethod("summary", "fmlmMod", function(object, ...) {
-  show(object)
+setMethod("summary", "fmlmMod", function(object, ddf = "fast", ...) {
+  show_fmlmMod(object, ddf = ddf)
 
   cat("\nDeviance:", round(object@deviance, 2), "\n")
   ll <- logLik(object)
